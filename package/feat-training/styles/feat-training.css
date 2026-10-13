@@ -1,0 +1,185 @@
+﻿
+.feat-training-tab {
+  position: static !important;
+  inset: auto !important;
+  z-index: auto !important;
+  width: 100% !important;
+  min-height: 100% !important;
+  padding: 1rem !important;
+  overflow-y: auto !important;
+  background: transparent !important;
+  pointer-events: auto !important;
+  box-sizing: border-box !important;
+}
+
+.feat-training-tab:not(.active) {
+  display: none !important;
+}
+
+.feat-training-tab.active {
+  display: block !important;
+}
+
+.feat-training-content {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1rem;
+  background: rgba(20, 20, 24, 0.88);
+  border: 1px solid #6f6449;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.feat-training-content h2 {
+  margin-top: 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(214, 180, 95, 0.35);
+}
+
+.feat-training-card {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #6f6449;
+  border-radius: 6px;
+}
+
+.feat-training-bar {
+  position: relative;
+  width: 100%;
+  height: 18px;
+  margin: 0.75rem 0;
+  border: 1px solid #9f8f64;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #1a1a1d;
+}
+
+.feat-training-bar-fill {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  background: linear-gradient(90deg, #8f6f2a, #d6b45f);
+  transition: width 0.25s ease;
+}
+
+.feat-training-checkpoint {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.75);
+  z-index: 2;
+}
+
+.feat-training-checkpoint.completed {
+  background: #f0d37a;
+  box-shadow: 0 0 5px #f0d37a;
+}
+
+.feat-training-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.feat-training-actions button {
+  width: 100%;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.feat-training-actions i {
+  margin-right: 0.35rem;
+}
+
+.feat-training-tab-button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.feat-training-tab-button i {
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 760px) {
+  .feat-training-tab {
+    padding: 0.5rem !important;
+  }
+
+  .feat-training-content {
+    padding: 0.75rem;
+  }
+
+  .feat-training-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Feat Training dialog input/select visibility */
+.feat-training-dialog-form select,
+.feat-training-dialog-form input,
+.feat-training-dialog-form select option {
+  background: #f2eee3 !important;
+  color: #1f1a12 !important;
+  border: 1px solid #7a6a45 !important;
+}
+
+.feat-training-dialog-form label {
+  color: #1f1a12 !important;
+}
+
+/* Fallback for hidden select option text inside dialogs */
+.dialog .form-group select,
+.dialog .form-group input {
+  background: #f2eee3 !important;
+  color: #1f1a12 !important;
+  border: 1px solid #7a6a45 !important;
+}
+
+.dialog .form-group select option {
+  background: #f2eee3 !important;
+  color: #1f1a12 !important;
+}
+
+
+/* v2.0.0 real sheet-tab behavior */
+.feat-training-tab {
+  position: static !important;
+  inset: auto !important;
+  z-index: auto !important;
+  width: 100% !important;
+  min-height: 100% !important;
+  padding: 1rem !important;
+  overflow-y: auto !important;
+  background: transparent !important;
+  pointer-events: auto !important;
+  box-sizing: border-box !important;
+}
+
+.feat-training-tab:not(.active) {
+  display: none !important;
+}
+
+.feat-training-tab.active {
+  display: block !important;
+}
+
+.feat-training-content {
+  max-width: 880px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+@media (max-width: 760px) {
+  .feat-training-tab {
+    padding: 0.5rem !important;
+  }
+
+  .feat-training-actions {
+    grid-template-columns: 1fr !important;
+  }
+}

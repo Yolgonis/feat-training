@@ -1,0 +1,30 @@
+{
+  "id": "feat-training",
+  "title": "Feat Training Tracker",
+  "description": "Track downtime feat training progress in Foundry VTT with configurable goals, checkpoints, ability checks, and a sheet tab that stays active after rerenders.",
+  "version": "2.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13.351"
+  },
+  "authors": [
+    {
+      "name": "yolgonis"
+    }
+  ],
+  "license": "All Rights Reserved",
+  "scripts": [
+    "scripts/feat-training-tracker.js"
+  ],
+  "styles": [
+    "styles/feat-training.css"
+  ],
+  "relationships": {
+    "systems": [
+      {
+        "id": "dnd5e",
+        "type": "system"
+      }
+    ]
+  }
+}
