@@ -253,139 +253,71 @@ function renderCheckpointMarkers(sessions, targetSessions, checkpointCount) {
 }
 
 async function askSessionAmount(title, defaultValue = 1) {
-  return new Promise(resolve => {
-    let resolved = false;
-
-    new Dialog({
-      title,
-      content: `
-        <form>
-          <div class="form-group">
-            <label>Session Count</label>
-            <input type="number" name="amount" value="${defaultValue}" min="1" step="1">
-          </div>
-        </form>
-      `,
-      buttons: {
-        ok: {
-          icon: '<i class="fas fa-check"></i>',
-          label: "Apply",
-          callback: html => {
-            resolved = true;
-            const value = Number(html.find('[name="amount"]').val());
-
-            if (!Number.isFinite(value) || value <= 0) {
-              ui.notifications.warn("Please enter a valid number.");
-              resolve(null);
-              return;
-            }
-
-            resolve(Math.floor(value));
-          }
-        },
-        cancel: {
-          label: "Cancel",
-          callback: () => {
-            resolved = true;
-            resolve(null);
-          }
-        }
-      },
-      default: "ok",
-      close: () => {
-        if (!resolved) resolve(null);
-      }
-    }).render(true);
+  const value = await foundry.applications.api.DialogV2.prompt({
+    window: { title },
+    content: `
+      <div class="form-group">
+        <label>Session Count</label>
+        <input type="number" name="amount" value="${defaultValue}" min="1" step="1" autofocus>
+      </div>
+    `,
+    ok: {
+      icon: "fas fa-check",
+      label: "Apply",
+      callback: (event, button) => button.form.elements.amount.valueAsNumber
+    },
+    rejectClose: false
   });
+  if (value === null || value === undefined) return null;
+
+  if (!Number.isFinite(value) || value <= 0) {
+    ui.notifications.warn("Please enter a valid number.");
+    return null;
+  }
+  return Math.floor(value);
 }
 
 async function askTrainingName(currentName = DEFAULT_TRAINING_NAME) {
-  return new Promise(resolve => {
-    let resolved = false;
-
-    new Dialog({
-      title: "Training Name",
-      content: `
-        <form>
-          <div class="form-group">
-            <label>Training Name</label>
-            <input type="text" name="trainingName" value="${escapeHtml(currentName)}">
-          </div>
-        </form>
-      `,
-      buttons: {
-        ok: {
-          icon: '<i class="fas fa-check"></i>',
-          label: "Save",
-          callback: html => {
-            resolved = true;
-            const value = html.find('[name="trainingName"]').val()?.trim();
-            resolve(value || null);
-          }
-        },
-        cancel: {
-          label: "Cancel",
-          callback: () => {
-            resolved = true;
-            resolve(null);
-          }
-        }
-      },
-      default: "ok",
-      close: () => {
-        if (!resolved) resolve(null);
-      }
-    }).render(true);
+  const value = await foundry.applications.api.DialogV2.prompt({
+    window: { title: "Training Name" },
+    content: `
+      <div class="form-group">
+        <label>Training Name</label>
+        <input type="text" name="trainingName" value="${escapeHtml(currentName)}" autofocus>
+      </div>
+    `,
+    ok: {
+      icon: "fas fa-check",
+      label: "Save",
+      callback: (event, button) => button.form.elements.trainingName.value.trim()
+    },
+    rejectClose: false
   });
+  return value || null;
 }
 
 async function askMainAbility(currentAbility = "str") {
-  return new Promise(resolve => {
-    let resolved = false;
+  const options = Object.entries(ABILITIES)
+    .map(([key, label]) => `<option value="${key}" ${key === currentAbility ? "selected" : ""}>${label}</option>`)
+    .join("");
 
-    const options = Object.entries(ABILITIES)
-      .map(([key, label]) => `
-        <option value="${key}" ${key === currentAbility ? "selected" : ""}>
-          ${label}
-        </option>
-      `)
-      .join("");
-
-    new Dialog({
-      title: "Set Main Ability",
-      content: `
-        <form>
-          <div class="form-group">
-            <label>Main Ability</label>
-            <select name="ability">${options}</select>
-          </div>
-        </form>
-      `,
-      buttons: {
-        ok: {
-          icon: '<i class="fas fa-check"></i>',
-          label: "Save",
-          callback: html => {
-            resolved = true;
-            resolve(html.find('[name="ability"]').val());
-          }
-        },
-        cancel: {
-          label: "Cancel",
-          callback: () => {
-            resolved = true;
-            resolve(null);
-          }
-        }
-      },
-      default: "ok",
-      close: () => {
-        if (!resolved) resolve(null);
-      }
-    }).render(true);
+  const value = await foundry.applications.api.DialogV2.prompt({
+    window: { title: "Set Main Ability" },
+    content: `
+      <div class="form-group">
+        <label>Main Ability</label>
+        <select name="ability">${options}</select>
+      </div>
+    `,
+    ok: {
+      icon: "fas fa-check",
+      label: "Save",
+      callback: (event, button) => button.form.elements.ability.value
+    },
+    rejectClose: false
   });
+  return value || null;
 }
-
 async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkpointCount) {
   // dnd5e'nin kendi ability check'i: avantaj/dezavantaj, exhaustion, bonuslar
   // ve roll dialog'u sisteme göre işler.
@@ -673,15 +605,14 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
     const next = getPreviousCheckpoint(current, targetSessions, checkpointCount);
 
-    const confirmBack = await Dialog.confirm({
-      title: "Fail Checkpoint",
+    const confirmBack = await foundry.applications.api.DialogV2.confirm({
+      window: { title: "Fail Checkpoint" },
       content: `
         <p>Did <b>${escapeHtml(actor.name)}</b> fail the checkpoint check?</p>
         <p>Progress will drop from <b>${current}</b> sessions to <b>${next}</b> sessions.</p>
       `,
-      yes: () => true,
-      no: () => false,
-      defaultYes: false
+      no: { default: true },
+      rejectClose: false
     });
 
     if (!confirmBack) return;
@@ -701,12 +632,11 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   });
 
   tab.querySelector(".feat-training-reset")?.addEventListener("click", async () => {
-    const confirmReset = await Dialog.confirm({
-      title: "Reset Training",
+    const confirmReset = await foundry.applications.api.DialogV2.confirm({
+      window: { title: "Reset Training" },
       content: `<p>Reset training progress for <b>${escapeHtml(actor.name)}</b>?</p>`,
-      yes: () => true,
-      no: () => false,
-      defaultYes: false
+      no: { default: true },
+      rejectClose: false
     });
 
     if (!confirmReset) return;
