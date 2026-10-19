@@ -9,7 +9,7 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 - Adds a dedicated Feat Training Tracker tab to character and NPC sheets.
 - Tracks training sessions, total hours, remaining work, and completion percentage.
 - Supports configurable training goals and checkpoint counts.
-- Lets the GM assign the ability used for checkpoint checks.
+- Picks the checkpoint ability automatically from the character's class: the primary ability of the highest-level class (the higher score if the class has several), or the highest score without a class. The GM can override it or switch back to "Automatic (class)".
 - Rolls checkpoint checks as real dnd5e ability checks (advantage, exhaustion and bonuses apply) against a per-character DC (default 15), and moves failed progress back to the previous checkpoint.
 - Checkpoints cannot be skipped: added sessions stop at the next checkpoint until its check is passed, and a passed checkpoint cannot be rolled again.
 - Failing a checkpoint drops progress to the previous checkpoint, but sessions count double until the failed point is reached again (recovery). The tab shows the recovery state to the GM and the player.
@@ -18,7 +18,7 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 
 ## Usage
 
-Open a character sheet and select the graduation-cap tab. The GM can configure the training name, goal, checkpoint count, checkpoint DC, and main ability from that tab.
+Open a character sheet and select the graduation-cap tab. The GM can configure the training name, goal, checkpoint count, checkpoint DC, and (optionally) the main ability from that tab.
 
 By default, one training session equals 4 downtime hours. The default feat training goal is 320 sessions.
 

@@ -323,9 +323,26 @@ async function askTrainingName(currentName = DEFAULT_TRAINING_NAME) {
   return value || null;
 }
 
-async function askMainAbility(currentAbility = "str") {
-  const options = Object.entries(ABILITIES)
-    .map(([key, label]) => `<option value="${key}" ${key === currentAbility ? "selected" : ""}>${label}</option>`)
+// Ana yetenek seçilmemişse en yüksek seviyeli sınıfın primary ability'si kullanılır;
+// birden fazlaysa (ör. Ranger: DEX/WIS) skoru yüksek olan, sınıf yoksa en yüksek skor.
+function getAutoAbility(actor) {
+  const scores = actor.system?.abilities ?? {};
+  const mainClass = Object.values(actor.classes ?? {})
+    .sort((a, b) => (b.system?.levels ?? 0) - (a.system?.levels ?? 0))[0];
+  const primary = [...(mainClass?.system?.primaryAbility?.value ?? [])].filter(key => key in ABILITIES);
+  const pool = primary.length ? primary : Object.keys(ABILITIES).filter(key => key in scores);
+  if (!pool.length) return null;
+  return pool.reduce((best, key) => ((scores[key]?.value ?? 0) > (scores[best]?.value ?? 0) ? key : best));
+}
+
+function getMainAbility(actor) {
+  return actor.getFlag(MODULE_ID, "mainAbility") ?? getAutoAbility(actor);
+}
+
+async function askMainAbility(currentAbility = null) {
+  const options = [`<option value="auto" ${currentAbility ? "" : "selected"}>Automatic (class)</option>`]
+    .concat(Object.entries(ABILITIES)
+      .map(([key, label]) => `<option value="${key}" ${key === currentAbility ? "selected" : ""}>${label}</option>`))
     .join("");
 
   const value = await foundry.applications.api.DialogV2.prompt({
@@ -390,7 +407,8 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   const checkpointCount = normalizeCheckpointCount(
     actor.getFlag(MODULE_ID, "checkpointCount") ?? DEFAULT_CHECKPOINT_COUNT
   );
-  const mainAbility = actor.getFlag(MODULE_ID, "mainAbility") ?? null;
+  const mainAbility = getMainAbility(actor);
+  const abilityIsAuto = !actor.getFlag(MODULE_ID, "mainAbility");
   const trainingName =
     actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
 
@@ -423,7 +441,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
               <p><b>Completion:</b> ${percent}%</p>
               <p><b>Remaining:</b> ${remainingSessions} sessions (${remainingHours} hours)</p>
               <p><b>Checkpoint Count:</b> ${checkpointCount}</p>
-              <p><b>Main Ability:</b> ${mainAbility ? ABILITIES[mainAbility] : "Not set"}</p>
+              <p><b>Main Ability:</b> ${mainAbility ? ABILITIES[mainAbility] : "Not set"}${mainAbility && abilityIsAuto ? " (automatic)" : ""}</p>
               <p><b>Checkpoint DC:</b> ${checkpointDC}</p>
               ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> sessions count double until ${recoveryUntil}.</p>` : ""}
               ${checkpointReady ? `<p><b>Checkpoint:</b> Check required before more sessions can be added.</p>` : ""}
@@ -508,7 +526,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   `;
 
   tab.querySelector(".feat-training-checkpoint-roll")?.addEventListener("click", async () => {
-    const ability = actor.getFlag(MODULE_ID, "mainAbility");
+    const ability = getMainAbility(actor);
 
     if (!ability) {
       ui.notifications.warn("Main Ability has not been set yet.");
@@ -629,14 +647,16 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   });
 
   tab.querySelector(".feat-training-main-ability")?.addEventListener("click", async () => {
-    const currentAbility = actor.getFlag(MODULE_ID, "mainAbility") ?? "str";
+    const currentAbility = actor.getFlag(MODULE_ID, "mainAbility") ?? null;
     const selectedAbility = await askMainAbility(currentAbility);
     if (!selectedAbility) return;
 
-    await actor.setFlag(MODULE_ID, "mainAbility", selectedAbility);
+    if (selectedAbility === "auto") await actor.unsetFlag(MODULE_ID, "mainAbility");
+    else await actor.setFlag(MODULE_ID, "mainAbility", selectedAbility);
 
+    const ability = getMainAbility(actor);
     ui.notifications.info(
-      `${actor.name}'s main ability was set to ${ABILITIES[selectedAbility]}.`
+      `${actor.name}'s main ability was set to ${ability ? ABILITIES[ability] : "Not set"}${selectedAbility === "auto" ? " (automatic)" : ""}.`
     );
 
     await renderFeatTrainingTab(sheet, actor, tab);
