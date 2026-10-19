@@ -415,12 +415,6 @@ async function setSessions(actor, sessions, targetSessions, checkpointCount, { r
   await actor.update(update);
 }
 
-function getPreviousCheckpoint(currentSessions, targetSessions, checkpointCount) {
-  const checkpoints = getCheckpointSessions(targetSessions, checkpointCount);
-  const previous = checkpoints.filter(value => value < currentSessions).pop();
-  return previous ?? 0;
-}
-
 // İşaret yalnızca checkpoint zarı geçildiyse "tamamlandı" görünür.
 function renderCheckpointMarkers(clearedCheckpoint, targetSessions, checkpointCount) {
   const checkpoints = getCheckpointSessions(targetSessions, checkpointCount);
@@ -493,29 +487,6 @@ function getMainAbility(actor) {
   return actor.getFlag(MODULE_ID, "mainAbility") ?? getAutoAbility(actor);
 }
 
-async function askMainAbility(currentAbility = null) {
-  const options = [`<option value="auto" ${currentAbility ? "" : "selected"}>Automatic (class)</option>`]
-    .concat(Object.entries(ABILITIES)
-      .map(([key, label]) => `<option value="${key}" ${key === currentAbility ? "selected" : ""}>${label}</option>`))
-    .join("");
-
-  const value = await foundry.applications.api.DialogV2.prompt({
-    window: { title: "Set Main Ability" },
-    content: `
-      <div class="form-group">
-        <label>Main Ability</label>
-        <select name="ability">${options}</select>
-      </div>
-    `,
-    ok: {
-      icon: "fas fa-check",
-      label: "Save",
-      callback: (event, button) => button.form.elements.ability.value
-    },
-    rejectClose: false
-  });
-  return value || null;
-}
 async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkpointCount) {
   // dnd5e'nin kendi ability check'i: avantaj/dezavantaj, exhaustion, bonuslar
   // ve roll dialog'u sisteme göre işler.
@@ -636,10 +607,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
                 <i class="fas fa-plus"></i> Add Sessions
               </button>
 
-              <button type="button" class="feat-training-subtract-custom">
-                <i class="fas fa-minus"></i> Remove Sessions
-              </button>
-
               <button type="button" class="feat-training-set-sessions">
                 <i class="fas fa-pen-to-square"></i> Set Sessions
               </button>
@@ -648,29 +615,11 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
                 <i class="fas fa-bullseye"></i> Set Goal
               </button>
 
-              <button type="button" class="feat-training-checkpoint-count">
-                <i class="fas fa-list-ol"></i> Checkpoints
-              </button>
-
-              <button type="button" class="feat-training-main-ability">
-                <i class="fas fa-brain"></i> Set Main Ability
-              </button>
-
               ${
                 checkpointReady
                   ? `
                     <button type="button" class="feat-training-checkpoint-roll">
                       <i class="fas fa-dice-d20"></i> Checkpoint Check
-                    </button>
-                  `
-                  : ""
-              }
-
-              ${
-                checkpointReady
-                  ? `
-                    <button type="button" class="feat-training-checkpoint-back">
-                      <i class="fas fa-arrow-rotate-left"></i> Fail Checkpoint
                     </button>
                   `
                   : ""
@@ -733,21 +682,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
   if (!game.user.isGM) return;
 
-  tab.querySelector(".feat-training-checkpoint-count")?.addEventListener("click", async () => {
-    // Son checkpoint hedefin kendisidir; girilen sayı checkpoint sayısıdır.
-    const amount = await askSessionAmount("Number of checkpoints", checkpointCount, { label: "Checkpoints" });
-    if (amount === null) return;
-
-    // Checkpoint konumları değişti; geçilmiş checkpoint yeni düzene göre yeniden türetilir.
-    await actor.update({
-      [`flags.${MODULE_ID}.checkpointCount`]: amount,
-      [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
-      [`flags.${MODULE_ID}.-=recoveryUntil`]: null
-    });
-
-    ui.notifications.info(`${actor.name} now has ${amount} checkpoints.`);
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
 
   // Feat sürükle-bırak: GM bir feat'i sekmeye bırakarak eğitim hedefi yapar.
   if (!tab.dataset.featTrainingDropBound) {
@@ -823,19 +757,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 
-  tab.querySelector(".feat-training-subtract-custom")?.addEventListener("click", async () => {
-    const amount = await askSessionAmount("How many sessions should be removed?", 1);
-    if (amount === null) return;
-
-    const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-    const next = Math.max(current - amount, 0);
-    const removed = current - next;
-
-    await setSessions(actor, next, targetSessions, checkpointCount);
-    ui.notifications.info(`${removed} sessions were removed from ${actor.name}.`);
-
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
 
   tab.querySelector(".feat-training-target")?.addEventListener("click", async () => {
     const autoGoal = getAutoTarget(actor);
@@ -859,57 +780,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 
-  tab.querySelector(".feat-training-main-ability")?.addEventListener("click", async () => {
-    const currentAbility = actor.getFlag(MODULE_ID, "mainAbility") ?? null;
-    const selectedAbility = await askMainAbility(currentAbility);
-    if (!selectedAbility) return;
 
-    if (selectedAbility === "auto") await actor.unsetFlag(MODULE_ID, "mainAbility");
-    else await actor.setFlag(MODULE_ID, "mainAbility", selectedAbility);
-
-    const ability = getMainAbility(actor);
-    ui.notifications.info(
-      `${actor.name}'s main ability was set to ${ability ? ABILITIES[ability] : "Not set"}${selectedAbility === "auto" ? " (automatic)" : ""}.`
-    );
-
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
-
-  tab.querySelector(".feat-training-checkpoint-back")?.addEventListener("click", async () => {
-    const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-    const cleared = getClearedCheckpoint(actor, current, targetSessions, checkpointCount);
-    if (!isAtCheckpoint(current, targetSessions, checkpointCount, cleared)) {
-      ui.notifications.warn("This character is not currently at a checkpoint.");
-      return;
-    }
-    const next = getPreviousCheckpoint(current, targetSessions, checkpointCount);
-
-    const confirmBack = await foundry.applications.api.DialogV2.confirm({
-      window: { title: "Fail Checkpoint" },
-      content: `
-        <p>Did <b>${escapeHtml(actor.name)}</b> fail the checkpoint check?</p>
-        <p>Progress will drop from <b>${current}</b> sessions to <b>${next}</b> sessions; sessions will count double until <b>${current}</b>.</p>
-      `,
-      no: { default: true },
-      rejectClose: false
-    });
-
-    if (!confirmBack) return;
-
-    await failCheckpoint(actor, current, targetSessions, checkpointCount);
-
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `
-        <b>${escapeHtml(actor.name)}</b> failed the checkpoint check.<br>
-        Progress dropped from <b>${current}</b> sessions to <b>${next}</b> sessions.<br>
-        Sessions count double until <b>${current}</b>.
-      `
-    });
-
-    ui.notifications.warn(`${actor.name} returned to the previous checkpoint.`);
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
 
   tab.querySelector(".feat-training-reset")?.addEventListener("click", async () => {
     const confirmReset = await foundry.applications.api.DialogV2.confirm({
