@@ -36,6 +36,33 @@ Hooks.on("renderNPCActorSheet", async (sheet, html) => {
   await injectTrainingTab(sheet, html);
 });
 
+// Tamamlanan eğitimin feat'i karaktere eklenince (doğrudan ya da advancement penceresi
+// bitince) eğitim sıfırlanır; sekme bir sonraki feat'e hazır olur. Ana yetenek ve
+// checkpoint sayısı karakter ayarı olarak korunur.
+Hooks.on("createItem", async (item, options, userId) => {
+  if (userId !== game.user.id || item.type !== "feat") return;
+  const actor = item.parent;
+  if (!(actor instanceof Actor) || !actor.getFlag(MODULE_ID, "featUuid")) return;
+
+  const sessions = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+  const targetSessions = getTargetSessions(actor);
+  const checkpointCount = normalizeCheckpointCount(actor.getFlag(MODULE_ID, "checkpointCount") ?? DEFAULT_CHECKPOINT_COUNT);
+  if (!isTrainingComplete(actor, sessions, targetSessions, checkpointCount)) return;
+
+  const identifier = actor.getFlag(MODULE_ID, "featIdentifier");
+  const name = actor.getFlag(MODULE_ID, "trainingName");
+  if (!((identifier && item.system?.identifier === identifier) || item.name === name)) return;
+
+  await resetTraining(actor);
+  ui.notifications.info(`${actor.name}'s training was reset. Drag a new feat onto the training tab to start again.`);
+});
+
+async function resetTraining(actor) {
+  const keys = ["sessions", "clearedCheckpoint", "recoveryUntil", "targetSessions", "trainingName",
+    "featUuid", "featCategory", "featIdentifier", "featRepeatable"];
+  await actor.update(Object.fromEntries(keys.map(key => [`flags.${MODULE_ID}.-=${key}`, null])));
+}
+
 function getActorKey(actor) {
   return actor?.uuid ?? actor?.id ?? actor?.name;
 }
