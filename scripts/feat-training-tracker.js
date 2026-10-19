@@ -390,12 +390,12 @@ function renderCheckpointMarkers(clearedCheckpoint, targetSessions, checkpointCo
   }).join("");
 }
 
-async function askSessionAmount(title, defaultValue = 1, { min = 1 } = {}) {
+async function askSessionAmount(title, defaultValue = 1, { min = 1, label = "Session Count" } = {}) {
   const value = await foundry.applications.api.DialogV2.prompt({
     window: { title },
     content: `
       <div class="form-group">
-        <label>Session Count</label>
+        <label>${label}</label>
         <input type="number" name="amount" value="${defaultValue}" min="${min}" step="1" autofocus>
       </div>
     `,
@@ -547,7 +547,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
               <p><b>Time:</b> ${totalHours}/${targetHours} hours</p>
               <p><b>Completion:</b> ${percent}%</p>
               <p><b>Remaining:</b> ${remainingSessions} sessions (${remainingHours} hours)</p>
-              <p><b>Checkpoint Count:</b> ${checkpointCount}</p>
+              <p><b>Checkpoints:</b> ${getCheckpointSessions(targetSessions, checkpointCount).length}</p>
               <p><b>Main Ability:</b> ${mainAbility ? ABILITIES[mainAbility] : "Not set"}${mainAbility && abilityIsAuto ? " (automatic)" : ""}</p>
               <p><b>Checkpoint DC:</b> ${checkpointDC}</p>
               ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> sessions count double until ${recoveryUntil}.</p>` : ""}
@@ -592,7 +592,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
               </button>
 
               <button type="button" class="feat-training-checkpoint-count">
-                <i class="fas fa-list-ol"></i> Checkpoint Count
+                <i class="fas fa-list-ol"></i> Checkpoints
               </button>
 
               <button type="button" class="feat-training-main-ability">
@@ -677,17 +677,19 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   if (!game.user.isGM) return;
 
   tab.querySelector(".feat-training-checkpoint-count")?.addEventListener("click", async () => {
-    const amount = await askSessionAmount("New checkpoint count", checkpointCount);
+    // Kayıtlı değer hedefin kaç parçaya bölündüğüdür; checkpoint sayısı bir eksiğidir
+    // (hedefe ulaşmak checkpoint değildir). GM doğrudan checkpoint sayısını girer.
+    const amount = await askSessionAmount("Number of checkpoints", checkpointCount - 1, { min: 0, label: "Checkpoints" });
     if (amount === null) return;
 
     // Checkpoint konumları değişti; geçilmiş checkpoint yeni düzene göre yeniden türetilir.
     await actor.update({
-      [`flags.${MODULE_ID}.checkpointCount`]: amount,
+      [`flags.${MODULE_ID}.checkpointCount`]: amount + 1,
       [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
       [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     });
 
-    ui.notifications.info(`${actor.name}'s checkpoint count was set to ${amount}.`);
+    ui.notifications.info(`${actor.name} now has ${amount} checkpoints.`);
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 
