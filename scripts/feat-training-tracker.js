@@ -212,6 +212,31 @@ function getNextBlockingCheckpoint(clearedCheckpoint, targetSessions, checkpoint
     ?? targetSessions;
 }
 
+// Başarısız checkpoint sonrası telafi: ilerleme bir önceki checkpoint'e düşer,
+// başarısız olunan noktaya kadar eklenen her oturum 2 oturum sayılır.
+const RECOVERY_MULTIPLIER = 2;
+
+function getRecoveryUntil(actor, sessions) {
+  const until = Number(actor.getFlag(MODULE_ID, "recoveryUntil"));
+  return Number.isFinite(until) && until > sessions ? until : null;
+}
+
+// Telafi bölgesinde eklenen oturumlar katlanır; bölge sınırını aşan kısım normal sayılır.
+function getProgressGain(current, amount, recoveryUntil) {
+  if (!recoveryUntil || current >= recoveryUntil) return amount;
+  const zoneSessions = Math.ceil((recoveryUntil - current) / RECOVERY_MULTIPLIER);
+  if (amount <= zoneSessions) return Math.min(amount * RECOVERY_MULTIPLIER, recoveryUntil - current);
+  return (recoveryUntil - current) + (amount - zoneSessions);
+}
+
+// Checkpoint'te başarısız olma: bir önceki checkpoint'e dön ve telafi sınırını kaydet.
+async function failCheckpoint(actor, current, targetSessions, checkpointCount) {
+  const previous = getPreviousCheckpoint(current, targetSessions, checkpointCount);
+  await setSessions(actor, previous, targetSessions, checkpointCount);
+  await actor.setFlag(MODULE_ID, "recoveryUntil", current);
+  return previous;
+}
+
 function getCheckpointDC(actor) {
   const dc = Number(actor.getFlag(MODULE_ID, "checkpointDC"));
   return Number.isFinite(dc) && dc > 0 ? Math.floor(dc) : DEFAULT_CHECKPOINT_DC;
@@ -223,10 +248,12 @@ async function setSessions(actor, sessions, targetSessions, checkpointCount) {
   const cleared = getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount);
   const valid = getCheckpointSessions(targetSessions, checkpointCount)
     .filter(value => value <= cleared && value <= sessions).pop() ?? 0;
-  await actor.update({
+  const update = {
     [`flags.${MODULE_ID}.sessions`]: sessions,
     [`flags.${MODULE_ID}.clearedCheckpoint`]: valid
-  });
+  };
+  if (!getRecoveryUntil(actor, sessions)) update[`flags.${MODULE_ID}.-=recoveryUntil`] = null;
+  await actor.update(update);
 }
 
 function getPreviousCheckpoint(currentSessions, targetSessions, checkpointCount) {
@@ -333,18 +360,20 @@ async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkp
   const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
 
   if (success) {
-    await actor.setFlag(MODULE_ID, "clearedCheckpoint", current);
+    await actor.update({
+      [`flags.${MODULE_ID}.clearedCheckpoint`]: current,
+      [`flags.${MODULE_ID}.-=recoveryUntil`]: null
+    });
     ui.notifications.info(`${actor.name} passed the checkpoint check.`);
   } else {
-    const previousCheckpoint = getPreviousCheckpoint(current, targetSessions, checkpointCount);
-
-    await setSessions(actor, previousCheckpoint, targetSessions, checkpointCount);
+    const previousCheckpoint = await failCheckpoint(actor, current, targetSessions, checkpointCount);
 
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `
         <b>${escapeHtml(actor.name)}</b> failed the checkpoint check.<br>
-        Progress dropped from <b>${current}</b> sessions to <b>${previousCheckpoint}</b> sessions.
+        Progress dropped from <b>${current}</b> sessions to <b>${previousCheckpoint}</b> sessions.<br>
+        Sessions count double until <b>${current}</b>.
       `
     });
 
@@ -374,6 +403,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   const clearedCheckpoint = getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount);
   const checkpointReady = isAtCheckpoint(sessions, targetSessions, checkpointCount, clearedCheckpoint);
   const checkpointDC = getCheckpointDC(actor);
+  const recoveryUntil = getRecoveryUntil(actor, sessions);
 
   tab.innerHTML = `
     <div class="feat-training-content">
@@ -395,11 +425,13 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
               <p><b>Checkpoint Count:</b> ${checkpointCount}</p>
               <p><b>Main Ability:</b> ${mainAbility ? ABILITIES[mainAbility] : "Not set"}</p>
               <p><b>Checkpoint DC:</b> ${checkpointDC}</p>
+              ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> sessions count double until ${recoveryUntil}.</p>` : ""}
               ${checkpointReady ? `<p><b>Checkpoint:</b> Check required before more sessions can be added.</p>` : ""}
               ${completed ? `<p class="feat-training-completed"><b>Training complete.</b></p>` : ""}
             `
             : `
               <p><b>Completion:</b> ${percent}%</p>
+              ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> training counts double.</p>` : ""}
               ${
                 checkpointReady
                   ? `
@@ -455,9 +487,15 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
                   : ""
               }
 
-              <button type="button" class="feat-training-checkpoint-back">
-                <i class="fas fa-arrow-rotate-left"></i> Fail Checkpoint
-              </button>
+              ${
+                checkpointReady
+                  ? `
+                    <button type="button" class="feat-training-checkpoint-back">
+                      <i class="fas fa-arrow-rotate-left"></i> Fail Checkpoint
+                    </button>
+                  `
+                  : ""
+              }
 
               <button type="button" class="feat-training-reset">
                 <i class="fas fa-undo"></i> Reset
@@ -498,7 +536,8 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     // Checkpoint konumları değişti; geçilmiş checkpoint yeni düzene göre yeniden türetilir.
     await actor.update({
       [`flags.${MODULE_ID}.checkpointCount`]: amount,
-      [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null
+      [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
+      [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     });
 
     ui.notifications.info(`${actor.name}'s checkpoint count was set to ${amount}.`);
@@ -541,16 +580,17 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     }
 
     const limit = getNextBlockingCheckpoint(cleared, targetSessions, checkpointCount);
-    const next = Math.min(current + amount, limit);
+    const gain = getProgressGain(current, amount, getRecoveryUntil(actor, current));
+    const next = Math.min(current + gain, limit);
 
     await setSessions(actor, next, targetSessions, checkpointCount);
 
     if (next >= targetSessions) {
       ui.notifications.info(`${actor.name} completed training.`);
-    } else if (next < current + amount) {
-      ui.notifications.info(
-        `${actor.name} reached a checkpoint at ${next} sessions; ${current + amount - next} sessions were not added.`
-      );
+    } else if (next < current + gain) {
+      ui.notifications.info(`${actor.name} reached a checkpoint at ${next} sessions; the remaining sessions were not added.`);
+    } else if (gain > amount) {
+      ui.notifications.info(`${actor.name} is recovering: ${amount} sessions counted as ${gain}.`);
     }
 
     await renderFeatTrainingTab(sheet, actor, tab);
@@ -580,7 +620,8 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     await actor.update({
       [`flags.${MODULE_ID}.targetSessions`]: amount,
       [`flags.${MODULE_ID}.sessions`]: Math.min(current, amount),
-      [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null
+      [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
+      [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     });
 
     ui.notifications.info(`${actor.name}'s target was set to ${amount} sessions.`);
@@ -603,13 +644,18 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
   tab.querySelector(".feat-training-checkpoint-back")?.addEventListener("click", async () => {
     const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+    const cleared = getClearedCheckpoint(actor, current, targetSessions, checkpointCount);
+    if (!isAtCheckpoint(current, targetSessions, checkpointCount, cleared)) {
+      ui.notifications.warn("This character is not currently at a checkpoint.");
+      return;
+    }
     const next = getPreviousCheckpoint(current, targetSessions, checkpointCount);
 
     const confirmBack = await foundry.applications.api.DialogV2.confirm({
       window: { title: "Fail Checkpoint" },
       content: `
         <p>Did <b>${escapeHtml(actor.name)}</b> fail the checkpoint check?</p>
-        <p>Progress will drop from <b>${current}</b> sessions to <b>${next}</b> sessions.</p>
+        <p>Progress will drop from <b>${current}</b> sessions to <b>${next}</b> sessions; sessions will count double until <b>${current}</b>.</p>
       `,
       no: { default: true },
       rejectClose: false
@@ -617,13 +663,14 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
     if (!confirmBack) return;
 
-    await setSessions(actor, next, targetSessions, checkpointCount);
+    await failCheckpoint(actor, current, targetSessions, checkpointCount);
 
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `
         <b>${escapeHtml(actor.name)}</b> failed the checkpoint check.<br>
-        Progress dropped from <b>${current}</b> sessions to <b>${next}</b> sessions.
+        Progress dropped from <b>${current}</b> sessions to <b>${next}</b> sessions.<br>
+        Sessions count double until <b>${current}</b>.
       `
     });
 

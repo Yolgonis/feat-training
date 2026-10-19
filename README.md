@@ -12,6 +12,8 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 - Lets the GM assign the ability used for checkpoint checks.
 - Rolls checkpoint checks as real dnd5e ability checks (advantage, exhaustion and bonuses apply) against a per-character DC (default 15), and moves failed progress back to the previous checkpoint.
 - Checkpoints cannot be skipped: added sessions stop at the next checkpoint until its check is passed, and a passed checkpoint cannot be rolled again.
+- Failing a checkpoint drops progress to the previous checkpoint, but sessions count double until the failed point is reached again (recovery). The tab shows the recovery state to the GM and the player.
+- The GM's Fail Checkpoint button only appears while the character is at a checkpoint.
 - Keeps the Feat Training Tracker tab open after sheet updates and rerenders.
 
 ## Usage
