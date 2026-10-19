@@ -415,21 +415,13 @@ async function setSessions(actor, sessions, targetSessions, checkpointCount, { r
   await actor.update(update);
 }
 
-// İşaret yalnızca checkpoint zarı geçildiyse "tamamlandı" görünür.
-function renderCheckpointMarkers(clearedCheckpoint, targetSessions, checkpointCount) {
-  const checkpoints = getCheckpointSessions(targetSessions, checkpointCount);
-
-  return checkpoints.map(checkpointSessions => {
-    const checkpointPercent = Math.round((checkpointSessions / targetSessions) * 100);
-    const completed = checkpointSessions <= clearedCheckpoint ? "completed" : "";
-
-    return `
-      <div
-        class="feat-training-checkpoint ${completed}"
-        title="${checkpointPercent}% - ${checkpointSessions} sessions"
-        style="left: ${checkpointPercent}%;">
-      </div>
-    `;
+// İşaretler: geçilmiş (altın), zarı bekleyen (vurgulu), ileride (soluk).
+function renderCheckpointMarkers(sessions, clearedCheckpoint, targetSessions, checkpointCount) {
+  return getCheckpointSessions(targetSessions, checkpointCount).map(checkpointSessions => {
+    const percent = (checkpointSessions / targetSessions) * 100;
+    const state = checkpointSessions <= clearedCheckpoint ? "passed"
+      : checkpointSessions === sessions ? "pending" : "upcoming";
+    return `<span class="ft-marker ${state}" style="left: ${percent}%" title="${checkpointSessions} sessions"></span>`;
   }).join("");
 }
 
@@ -544,8 +536,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   const trainingName =
     actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
 
-  const totalHours = sessions * HOURS_PER_SESSION;
-  const targetHours = targetSessions * HOURS_PER_SESSION;
   const remainingSessions = Math.max(targetSessions - sessions, 0);
   const remainingHours = remainingSessions * HOURS_PER_SESSION;
   const percent = Math.min(100, Math.round((sessions / targetSessions) * 100));
@@ -555,93 +545,80 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   const checkpointDC = getCheckpointDC();
   const recoveryUntil = getRecoveryUntil(actor, sessions);
 
+  const isGM = game.user.isGM;
+  const nextCheckpoint = getNextBlockingCheckpoint(clearedCheckpoint, targetSessions, checkpointCount);
+  const toNext = Math.max(nextCheckpoint - sessions, 0);
+  const sessionsToNext = recoveryUntil && recoveryUntil >= nextCheckpoint ? Math.ceil(toNext / RECOVERY_MULTIPLIER) : toNext;
+  const goalNote = goalIsManual ? "manual goal" : getAutoTarget(actor) ? "automatic goal" : "default goal";
+  const abilityLabel = mainAbility ? (CONFIG.DND5E.abilities[mainAbility]?.abbreviation ?? mainAbility).toUpperCase() : "—";
+
+  // Tek durum şeridi: öncelik sırasıyla tamamlandı > checkpoint > telafi.
+  let banner = "";
+  if (completed) {
+    banner = `
+      <div class="ft-banner ft-banner-complete">
+        <i class="fas fa-award"></i>
+        <div class="ft-banner-text"><strong>Training complete</strong>
+          <span>${featLinked ? (featGranted ? "Feat granted." : (isGM ? "Grant the feat to finish." : "Waiting for the GM to grant the feat.")) : "No feat was linked."}</span></div>
+        ${isGM && featLinked && !featGranted ? `<button type="button" class="feat-training-grant"><i class="fas fa-award"></i> Grant Feat</button>` : ""}
+      </div>`;
+  } else if (checkpointReady) {
+    const final = sessions >= targetSessions;
+    banner = `
+      <div class="ft-banner ft-banner-checkpoint">
+        <i class="fas fa-dice-d20"></i>
+        <div class="ft-banner-text"><strong>${final ? "Final checkpoint" : "Checkpoint reached"}</strong>
+          <span>${abilityLabel} check, DC ${checkpointDC}. ${final ? "Pass it to complete training." : "Pass it to keep training."}</span></div>
+        <button type="button" class="feat-training-checkpoint-roll"><i class="fas fa-dice-d20"></i> Roll</button>
+      </div>`;
+  } else if (recoveryUntil) {
+    banner = `
+      <div class="ft-banner ft-banner-recovery">
+        <i class="fas fa-forward"></i>
+        <div class="ft-banner-text"><strong>Recovery</strong>
+          <span>Sessions count double until ${recoveryUntil}.</span></div>
+      </div>`;
+  }
+
   tab.innerHTML = `
-    <div class="feat-training-content">
-      <h2>${escapeHtml(trainingName)}</h2>
-
-      <div class="feat-training-card">
-        <div class="feat-training-bar">
-          ${renderCheckpointMarkers(clearedCheckpoint, targetSessions, checkpointCount)}
-          <div class="feat-training-bar-fill" style="width: ${percent}%"></div>
+    <div class="feat-training-content ft">
+      <header class="ft-header">
+        <div class="ft-title">
+          <span class="ft-eyebrow">Feat Training</span>
+          <h2>${featLinked ? escapeHtml(trainingName) : (actor.getFlag(MODULE_ID, "trainingName") ? escapeHtml(trainingName) : "No feat in training")}</h2>
         </div>
+        ${featCategory ? `<span class="ft-badge">${FEAT_CATEGORY_LABELS[featCategory] ?? featCategory}</span>` : ""}
+      </header>
 
-        ${
-          game.user.isGM
-            ? `
-              <p><b>Feat:</b> ${featLinked ? `${escapeHtml(trainingName)}${featCategory ? ` (${FEAT_CATEGORY_LABELS[featCategory] ?? featCategory})` : ""}` : "Not linked — drag a feat onto this tab"}</p>
-              <p><b>Sessions:</b> ${sessions}/${targetSessions} ${goalIsManual ? "(manual goal)" : getAutoTarget(actor) ? "(automatic goal)" : "(default goal)"}</p>
-              <p><b>Time:</b> ${totalHours}/${targetHours} hours</p>
-              <p><b>Completion:</b> ${percent}%</p>
-              <p><b>Remaining:</b> ${remainingSessions} sessions (${remainingHours} hours)</p>
-              <p><b>Checkpoints:</b> ${getCheckpointSessions(targetSessions, checkpointCount).length}</p>
-              <p><b>Main Ability:</b> ${mainAbility ? ABILITIES[mainAbility] : "Not set"}${mainAbility && abilityIsAuto ? " (automatic)" : ""}</p>
-              <p><b>Checkpoint DC:</b> ${checkpointDC}</p>
-              ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> sessions count double until ${recoveryUntil}.</p>` : ""}
-              ${checkpointReady ? (sessions >= targetSessions
-                ? `<p><b>Final Checkpoint:</b> Pass this check to complete training.</p>`
-                : `<p><b>Checkpoint:</b> Check required before more sessions can be added.</p>`) : ""}
-              ${completed ? `<p class="feat-training-completed"><b>Training complete.</b>${featLinked ? (featGranted ? " Feat granted." : " Feat not granted yet.") : ""}</p>` : ""}
-            `
-            : `
-              <p><b>Completion:</b> ${percent}%</p>
-              ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> training counts double.</p>` : ""}
-              ${
-                checkpointReady
-                  ? `
-                    <button type="button" class="feat-training-checkpoint-roll">
-                      <i class="fas fa-dice-d20"></i> Checkpoint Check
-                    </button>
-                  `
-                  : ""
-              }
-            `
-        }
-      </div>
+      ${isGM && !featLinked ? `<div class="ft-dropzone"><i class="fas fa-hand-pointer"></i> Drag a feat here to start training</div>` : ""}
 
-      ${
-        game.user.isGM
-          ? `
-            <div class="feat-training-actions">
+      <section class="ft-progress">
+        <div class="ft-bar">
+          <div class="ft-bar-fill" style="width: ${percent}%"></div>
+          ${renderCheckpointMarkers(sessions, clearedCheckpoint, targetSessions, checkpointCount)}
+        </div>
+        <div class="ft-progress-meta">
+          <span class="ft-percent">${percent}%</span>
+          ${isGM ? `<span>${sessions} / ${targetSessions} sessions <em>· ${goalNote}</em></span>` : ""}
+        </div>
+      </section>
 
-              <button type="button" class="feat-training-add-custom">
-                <i class="fas fa-plus"></i> Add Sessions
-              </button>
+      <section class="ft-stats">
+        ${isGM ? `
+          <div class="ft-stat"><span class="ft-stat-value">${remainingSessions}</span><span class="ft-stat-label">sessions left · ${remainingHours} h</span></div>` : ""}
+        <div class="ft-stat"><span class="ft-stat-value">${completed ? "—" : checkpointReady ? "Now" : sessionsToNext}</span><span class="ft-stat-label">${completed ? "all checkpoints passed" : checkpointReady ? "checkpoint check" : "sessions to next checkpoint"}</span></div>
+        <div class="ft-stat"><span class="ft-stat-value">${abilityLabel}</span><span class="ft-stat-label">check · DC ${checkpointDC}${isGM && mainAbility && abilityIsAuto ? " · from class" : ""}</span></div>
+      </section>
 
-              <button type="button" class="feat-training-set-sessions">
-                <i class="fas fa-pen-to-square"></i> Set Sessions
-              </button>
+      ${banner}
 
-              <button type="button" class="feat-training-target">
-                <i class="fas fa-bullseye"></i> Set Goal
-              </button>
-
-              ${
-                checkpointReady
-                  ? `
-                    <button type="button" class="feat-training-checkpoint-roll">
-                      <i class="fas fa-dice-d20"></i> Checkpoint Check
-                    </button>
-                  `
-                  : ""
-              }
-
-              ${
-                completed && featLinked && !featGranted
-                  ? `
-                    <button type="button" class="feat-training-grant">
-                      <i class="fas fa-award"></i> Grant Feat
-                    </button>
-                  `
-                  : ""
-              }
-
-              <button type="button" class="feat-training-reset">
-                <i class="fas fa-undo"></i> Reset
-              </button>
-            </div>
-          `
-          : ""
-      }
+      ${isGM ? `
+        <footer class="ft-actions">
+          <button type="button" class="feat-training-add-custom" data-tooltip="Add sessions"><i class="fas fa-plus"></i> Add</button>
+          <button type="button" class="feat-training-set-sessions" data-tooltip="Set the session count directly"><i class="fas fa-pen-to-square"></i> Set</button>
+          <button type="button" class="feat-training-target" data-tooltip="Set the goal"><i class="fas fa-bullseye"></i> Goal</button>
+          <button type="button" class="feat-training-reset ft-danger" data-tooltip="Reset training"><i class="fas fa-rotate-left"></i> Reset</button>
+        </footer>` : ""}
     </div>
   `;
 

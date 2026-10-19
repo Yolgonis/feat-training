@@ -1,4 +1,4 @@
-﻿
+﻿/* ---------- Sekme davranışı (dnd5e sayfa sekmesi) ---------- */
 .feat-training-tab {
   position: static !important;
   inset: auto !important;
@@ -18,79 +18,6 @@
 
 .feat-training-tab.active {
   display: block !important;
-}
-
-.feat-training-content {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 1rem;
-  background: rgba(20, 20, 24, 0.88);
-  border: 1px solid #6f6449;
-  border-radius: 8px;
-  box-sizing: border-box;
-}
-
-.feat-training-content h2 {
-  margin-top: 0;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(214, 180, 95, 0.35);
-}
-
-.feat-training-card {
-  padding: 1rem;
-  margin-bottom: 1rem;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid #6f6449;
-  border-radius: 6px;
-}
-
-.feat-training-bar {
-  position: relative;
-  width: 100%;
-  height: 18px;
-  margin: 0.75rem 0;
-  border: 1px solid #9f8f64;
-  border-radius: 999px;
-  overflow: hidden;
-  background: #1a1a1d;
-}
-
-.feat-training-bar-fill {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-  background: linear-gradient(90deg, #8f6f2a, #d6b45f);
-  transition: width 0.25s ease;
-}
-
-.feat-training-checkpoint {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.75);
-  z-index: 2;
-}
-
-.feat-training-checkpoint.completed {
-  background: #f0d37a;
-  box-shadow: 0 0 5px #f0d37a;
-}
-
-.feat-training-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
-  gap: 0.5rem;
-}
-
-.feat-training-actions button {
-  width: 100%;
-  min-height: 36px;
-  cursor: pointer;
-}
-
-.feat-training-actions i {
-  margin-right: 0.35rem;
 }
 
 .feat-training-tab-button {
@@ -105,34 +32,273 @@
   line-height: 1 !important;
 }
 
-@media (max-width: 760px) {
+/* ---------- Panel ---------- */
+.ft {
+  --ft-gold: #d6b45f;
+  --ft-gold-dim: rgba(214, 180, 95, 0.35);
+  --ft-text: #ece6d6;
+  --ft-muted: #a8a08c;
+  --ft-surface: rgba(18, 18, 22, 0.9);
+  --ft-surface-2: rgba(255, 255, 255, 0.04);
+  --ft-border: rgba(214, 180, 95, 0.28);
+
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: var(--ft-text);
+  background: var(--ft-surface);
+  border: 1px solid var(--ft-border);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+/* Başlık */
+.ft-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ft-eyebrow {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ft-muted);
+}
+
+.ft-header h2 {
+  margin: 0.1rem 0 0;
+  padding: 0;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  color: var(--ft-text);
+}
+
+.ft-badge {
+  flex: none;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  color: var(--ft-gold);
+  border: 1px solid var(--ft-gold-dim);
+  border-radius: 999px;
+  background: rgba(214, 180, 95, 0.08);
+}
+
+/* Feat sürükleme alanı */
+.ft-dropzone {
+  padding: 0.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ft-muted);
+  border: 1px dashed var(--ft-gold-dim);
+  border-radius: 8px;
+}
+
+.ft-dropzone i {
+  margin-right: 0.35rem;
+}
+
+/* İlerleme */
+.ft-bar {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--ft-border);
+  overflow: visible;
+}
+
+.ft-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #8f6f2a, var(--ft-gold));
+  transition: width 0.3s ease;
+}
+
+.ft-marker {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: #2a2a30;
+}
+
+.ft-marker.passed {
+  background: #f3dc8f;
+  border-color: #f3dc8f;
+}
+
+.ft-marker.pending {
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-color: var(--ft-gold);
+  box-shadow: 0 0 0 3px rgba(214, 180, 95, 0.35);
+}
+
+.ft-progress-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--ft-muted);
+}
+
+.ft-progress-meta em {
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.ft-percent {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ft-text);
+}
+
+/* Bilgi kutuları */
+.ft-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.ft-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--ft-surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.ft-stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ft-text);
+}
+
+.ft-stat-label {
+  font-size: 0.75rem;
+  color: var(--ft-muted);
+}
+
+/* Durum şeridi */
+.ft-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid;
+}
+
+.ft-banner > i {
+  font-size: 1.2rem;
+}
+
+.ft-banner-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.85rem;
+}
+
+.ft-banner-text span {
+  color: var(--ft-muted);
+}
+
+.ft-banner button {
+  flex: none;
+  width: auto;
+  padding: 0.35rem 0.9rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ft-banner-checkpoint {
+  background: rgba(214, 180, 95, 0.1);
+  border-color: var(--ft-gold-dim);
+}
+
+.ft-banner-checkpoint > i {
+  color: var(--ft-gold);
+}
+
+.ft-banner-complete {
+  background: rgba(98, 168, 110, 0.12);
+  border-color: rgba(98, 168, 110, 0.45);
+}
+
+.ft-banner-complete > i {
+  color: #8fd19b;
+}
+
+.ft-banner-recovery {
+  background: rgba(96, 150, 210, 0.1);
+  border-color: rgba(96, 150, 210, 0.4);
+}
+
+.ft-banner-recovery > i {
+  color: #8db8e8;
+}
+
+/* GM düğmeleri */
+.ft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ft-actions button {
+  flex: 1 1 0;
+  min-width: 90px;
+  min-height: 32px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ft-actions button i {
+  margin-right: 0.3rem;
+}
+
+.ft-actions .ft-danger {
+  flex: 0 1 auto;
+  opacity: 0.75;
+}
+
+.ft-actions .ft-danger:hover {
+  opacity: 1;
+}
+
+@media (max-width: 560px) {
   .feat-training-tab {
     padding: 0.5rem !important;
   }
 
-  .feat-training-content {
-    padding: 0.75rem;
+  .ft {
+    padding: 1rem 0.85rem;
   }
 
-  .feat-training-actions {
-    grid-template-columns: 1fr;
+  .ft-banner {
+    flex-wrap: wrap;
   }
 }
 
-/* Feat Training dialog input/select visibility */
-.feat-training-dialog-form select,
-.feat-training-dialog-form input,
-.feat-training-dialog-form select option {
-  background: #f2eee3 !important;
-  color: #1f1a12 !important;
-  border: 1px solid #7a6a45 !important;
-}
-
-.feat-training-dialog-form label {
-  color: #1f1a12 !important;
-}
-
-/* Fallback for hidden select option text inside dialogs */
+/* ---------- Pencere alanları (okunabilirlik) ---------- */
 .dialog .form-group select,
 .dialog .form-group input {
   background: #f2eee3 !important;
@@ -143,43 +309,4 @@
 .dialog .form-group select option {
   background: #f2eee3 !important;
   color: #1f1a12 !important;
-}
-
-
-/* v2.0.0 real sheet-tab behavior */
-.feat-training-tab {
-  position: static !important;
-  inset: auto !important;
-  z-index: auto !important;
-  width: 100% !important;
-  min-height: 100% !important;
-  padding: 1rem !important;
-  overflow-y: auto !important;
-  background: transparent !important;
-  pointer-events: auto !important;
-  box-sizing: border-box !important;
-}
-
-.feat-training-tab:not(.active) {
-  display: none !important;
-}
-
-.feat-training-tab.active {
-  display: block !important;
-}
-
-.feat-training-content {
-  max-width: 880px;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
-
-@media (max-width: 760px) {
-  .feat-training-tab {
-    padding: 0.5rem !important;
-  }
-
-  .feat-training-actions {
-    grid-template-columns: 1fr !important;
-  }
 }
