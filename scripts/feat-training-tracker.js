@@ -6,7 +6,11 @@ const DEFAULT_CHECKPOINT_COUNT = 10;
 const DEFAULT_TRAINING_NAME = "Feat Training Tracker";
 const HOURS_PER_SESSION = 4;
 const TAB_ID = "feat-training";
-const DEFAULT_CHECKPOINT_DC = 15;
+const CHECKPOINT_DC = 15;
+
+// Feat kategorisine göre otomatik hedef (oturum). Epic Boon eğitimle öğrenilemez.
+const FEAT_GOALS = { origin: 120, fightingStyle: 160, general: 240 };
+const FEAT_CATEGORY_LABELS = { origin: "Origin", fightingStyle: "Fighting Style", general: "General", epicBoon: "Epic Boon" };
 const ACTIVE_TABS = globalThis.FeatTrainingActiveTabs ??= new Map();
 
 const ABILITIES = {
@@ -237,9 +241,78 @@ async function failCheckpoint(actor, current, targetSessions, checkpointCount) {
   return previous;
 }
 
-function getCheckpointDC(actor) {
-  const dc = Number(actor.getFlag(MODULE_ID, "checkpointDC"));
-  return Number.isFinite(dc) && dc > 0 ? Math.floor(dc) : DEFAULT_CHECKPOINT_DC;
+function getCheckpointDC() {
+  return CHECKPOINT_DC;
+}
+
+// Hedef: GM'in elle girdiği değer > bağlı feat'in kategorisi > varsayılan.
+function getAutoTarget(actor) {
+  return FEAT_GOALS[actor.getFlag(MODULE_ID, "featCategory")] ?? null;
+}
+
+function getTargetSessions(actor) {
+  const manual = Number(actor.getFlag(MODULE_ID, "targetSessions"));
+  if (Number.isFinite(manual) && manual > 0) return manual;
+  return getAutoTarget(actor) ?? DEFAULT_TARGET_SESSIONS;
+}
+
+// Bir feat'i eğitim hedefi olarak bağlar; feat karaktere eklenmez.
+async function linkFeat(actor, item) {
+  if (item?.type !== "feat" || item.system?.type?.value !== "feat") {
+    ui.notifications.warn("Only feats can be linked to training.");
+    return false;
+  }
+  const category = item.system.type.subtype || null;
+  if (category === "epicBoon") {
+    ui.notifications.warn(`${item.name} is an Epic Boon and cannot be learned through training.`);
+    return false;
+  }
+  const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+  // Süren bir eğitimin elle girilmiş hedefi korunur; otomatiğe geçmek GM'in Set Goal kararıdır.
+  const keepManual = current > 0 && Number(actor.getFlag(MODULE_ID, "targetSessions")) > 0;
+  const useAuto = Boolean(FEAT_GOALS[category]) && !keepManual;
+  const target = useAuto ? FEAT_GOALS[category] : getTargetSessions(actor);
+  await actor.update({
+    [`flags.${MODULE_ID}.featUuid`]: item.uuid,
+    [`flags.${MODULE_ID}.featCategory`]: category,
+    [`flags.${MODULE_ID}.trainingName`]: item.name,
+    ...(useAuto ? {
+      [`flags.${MODULE_ID}.-=targetSessions`]: null,
+      [`flags.${MODULE_ID}.sessions`]: Math.min(current, target),
+      [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
+      [`flags.${MODULE_ID}.-=recoveryUntil`]: null
+    } : {})
+  });
+  if (useAuto) ui.notifications.info(`${actor.name} is now training ${item.name} (${FEAT_CATEGORY_LABELS[category]}, ${target} sessions).`);
+  else if (keepManual) ui.notifications.info(`${actor.name} is now training ${item.name}; the manual goal of ${target} sessions was kept. Use Set Goal to switch to automatic.`);
+  else ui.notifications.info(`${actor.name} is now training ${item.name}. This feat has no category; set the goal manually.`);
+  return true;
+}
+
+async function askGoal(currentGoal, autoGoal) {
+  const buttons = [{
+    action: "save", icon: "fas fa-check", label: "Save", default: true,
+    callback: (event, button) => button.form.elements.amount.valueAsNumber
+  }];
+  if (autoGoal) buttons.push({ action: "auto", icon: "fas fa-wand-magic-sparkles", label: `Automatic (feat: ${autoGoal})`, callback: () => "auto" });
+  const value = await foundry.applications.api.DialogV2.wait({
+    window: { title: "Set Goal" },
+    content: `
+      <div class="form-group">
+        <label>Target Sessions</label>
+        <input type="number" name="amount" value="${currentGoal}" min="1" step="1" autofocus>
+      </div>
+    `,
+    buttons,
+    rejectClose: false
+  });
+  if (value === "auto") return "auto";
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value) || value <= 0) {
+    ui.notifications.warn("Please enter a valid number.");
+    return null;
+  }
+  return Math.floor(value);
 }
 
 // Oturum sayısı veya checkpoint düzeni değiştiğinde geçilmiş checkpoint'i
@@ -366,7 +439,7 @@ async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkp
   // dnd5e'nin kendi ability check'i: avantaj/dezavantaj, exhaustion, bonuslar
   // ve roll dialog'u sisteme göre işler.
   const rolls = await actor.rollAbilityCheck(
-    { ability, target: getCheckpointDC(actor) },
+    { ability, target: getCheckpointDC() },
     {},
     { data: { flavor: `Training Checkpoint — ${CONFIG.DND5E.abilities[ability]?.label ?? ability}` } }
   );
@@ -402,8 +475,10 @@ async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkp
 
 async function renderFeatTrainingTab(sheet, actor, tab) {
   const sessions = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-  const targetSessions =
-    actor.getFlag(MODULE_ID, "targetSessions") ?? DEFAULT_TARGET_SESSIONS;
+  const targetSessions = getTargetSessions(actor);
+  const goalIsManual = Number(actor.getFlag(MODULE_ID, "targetSessions")) > 0;
+  const featCategory = actor.getFlag(MODULE_ID, "featCategory") ?? null;
+  const featLinked = Boolean(actor.getFlag(MODULE_ID, "featUuid"));
   const checkpointCount = normalizeCheckpointCount(
     actor.getFlag(MODULE_ID, "checkpointCount") ?? DEFAULT_CHECKPOINT_COUNT
   );
@@ -420,7 +495,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   const completed = sessions >= targetSessions;
   const clearedCheckpoint = getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount);
   const checkpointReady = isAtCheckpoint(sessions, targetSessions, checkpointCount, clearedCheckpoint);
-  const checkpointDC = getCheckpointDC(actor);
+  const checkpointDC = getCheckpointDC();
   const recoveryUntil = getRecoveryUntil(actor, sessions);
 
   tab.innerHTML = `
@@ -436,7 +511,8 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
         ${
           game.user.isGM
             ? `
-              <p><b>Sessions:</b> ${sessions}/${targetSessions}</p>
+              <p><b>Feat:</b> ${featLinked ? `${escapeHtml(trainingName)}${featCategory ? ` (${FEAT_CATEGORY_LABELS[featCategory] ?? featCategory})` : ""}` : "Not linked — drag a feat onto this tab"}</p>
+              <p><b>Sessions:</b> ${sessions}/${targetSessions} ${goalIsManual ? "(manual goal)" : getAutoTarget(actor) ? "(automatic goal)" : "(default goal)"}</p>
               <p><b>Time:</b> ${totalHours}/${targetHours} hours</p>
               <p><b>Completion:</b> ${percent}%</p>
               <p><b>Remaining:</b> ${remainingSessions} sessions (${remainingHours} hours)</p>
@@ -489,10 +565,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
               <button type="button" class="feat-training-main-ability">
                 <i class="fas fa-brain"></i> Set Main Ability
-              </button>
-
-              <button type="button" class="feat-training-checkpoint-dc">
-                <i class="fas fa-shield-halved"></i> Checkpoint DC
               </button>
 
               ${
@@ -562,15 +634,20 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 
-  tab.querySelector(".feat-training-checkpoint-dc")?.addEventListener("click", async () => {
-    const dc = await askSessionAmount("New checkpoint DC", checkpointDC);
-    if (dc === null) return;
-
-    await actor.setFlag(MODULE_ID, "checkpointDC", dc);
-
-    ui.notifications.info(`${actor.name}'s checkpoint DC was set to ${dc}.`);
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
+  // Feat sürükle-bırak: GM bir feat'i sekmeye bırakarak eğitim hedefi yapar.
+  if (!tab.dataset.featTrainingDropBound) {
+    tab.dataset.featTrainingDropBound = "true";
+    tab.addEventListener("dragover", event => event.preventDefault());
+    tab.addEventListener("drop", async event => {
+      if (!game.user.isGM) return;
+      const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
+      if (data?.type !== "Item") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const item = await fromUuid(data.uuid);
+      if (await linkFeat(actor, item)) await renderFeatTrainingTab(sheet, actor, tab);
+    });
+  }
 
   tab.querySelector(".feat-training-name")?.addEventListener("click", async () => {
     const currentName =
@@ -629,20 +706,24 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   });
 
   tab.querySelector(".feat-training-target")?.addEventListener("click", async () => {
-    const amount = await askSessionAmount("New target session count", targetSessions);
-    if (amount === null) return;
+    const autoGoal = getAutoTarget(actor);
+    const choice = await askGoal(targetSessions, autoGoal);
+    if (choice === null) return;
+    const amount = choice === "auto" ? autoGoal : choice;
 
     const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
 
     // Checkpoint konumları hedefe bağlı; geçilmiş checkpoint yeniden türetilir.
     await actor.update({
-      [`flags.${MODULE_ID}.targetSessions`]: amount,
+      ...(choice === "auto"
+        ? { [`flags.${MODULE_ID}.-=targetSessions`]: null }
+        : { [`flags.${MODULE_ID}.targetSessions`]: amount }),
       [`flags.${MODULE_ID}.sessions`]: Math.min(current, amount),
       [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
       [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     });
 
-    ui.notifications.info(`${actor.name}'s target was set to ${amount} sessions.`);
+    ui.notifications.info(`${actor.name}'s target was set to ${amount} sessions${choice === "auto" ? " (automatic)" : ""}.`);
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 
