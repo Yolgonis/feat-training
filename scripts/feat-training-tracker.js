@@ -270,11 +270,26 @@ function getProgressGain(current, amount, recoveryUntil) {
 }
 
 // Checkpoint'te başarısız olma: bir önceki checkpoint'e dön ve telafi sınırını kaydet.
-async function failCheckpoint(actor, current, targetSessions, checkpointCount) {
-  const previous = getPreviousCheckpoint(current, targetSessions, checkpointCount);
-  await setSessions(actor, previous, targetSessions, checkpointCount);
-  await actor.setFlag(MODULE_ID, "recoveryUntil", current);
+// steps: kaç checkpoint geriye düşüleceği (doğal 1'de 2). Düşülen noktanın üstündeki
+// checkpoint'ler yeniden zar ister.
+async function failCheckpoint(actor, current, targetSessions, checkpointCount, { steps = 1 } = {}) {
+  const earlier = getCheckpointSessions(targetSessions, checkpointCount).filter(value => value < current);
+  const previous = earlier[earlier.length - steps] ?? 0;
+  const cleared = getClearedCheckpoint(actor, current, targetSessions, checkpointCount);
+  await actor.update({
+    [`flags.${MODULE_ID}.sessions`]: previous,
+    [`flags.${MODULE_ID}.clearedCheckpoint`]: Math.min(cleared, previous),
+    [`flags.${MODULE_ID}.recoveryUntil`]: current
+  });
   return previous;
+}
+
+// Tutulan d20 doğal 1 mi? (avantaj/dezavantajda tutulan zar)
+function isNaturalOne(roll) {
+  const d20 = roll?.d20 ?? roll?.dice?.find(die => die.faces === 20);
+  if (!d20) return false;
+  const kept = d20.results?.filter(result => result.active !== false && !result.discarded) ?? [];
+  return kept.length > 0 && kept.every(result => result.result === 1);
 }
 
 function getCheckpointDC() {
@@ -512,29 +527,32 @@ async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkp
   const roll = rolls?.[0];
   if (!roll) return null;
 
-  const success = roll.isSuccess;
+  // Doğal 1 toplam ne olursa olsun başarısızdır ve 2 checkpoint geriletir.
+  const naturalOne = isNaturalOne(roll);
+  const success = roll.isSuccess && !naturalOne;
   const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
 
   if (success) {
+    // Telafi, başarısız olunan noktaya kadar sürer; aradaki checkpoint'i geçmek onu bitirmez.
     await actor.update({
       [`flags.${MODULE_ID}.clearedCheckpoint`]: current,
-      [`flags.${MODULE_ID}.-=recoveryUntil`]: null
+      ...(getRecoveryUntil(actor, current) ? {} : { [`flags.${MODULE_ID}.-=recoveryUntil`]: null })
     });
     if (current >= targetSessions) await completeTraining(actor);
     else ui.notifications.info(`${actor.name} passed the checkpoint check.`);
   } else {
-    const previousCheckpoint = await failCheckpoint(actor, current, targetSessions, checkpointCount);
+    const previousCheckpoint = await failCheckpoint(actor, current, targetSessions, checkpointCount, { steps: naturalOne ? 2 : 1 });
 
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `
-        <b>${escapeHtml(actor.name)}</b> failed the checkpoint check.<br>
+        <b>${escapeHtml(actor.name)}</b> failed the checkpoint check${naturalOne ? " with a natural 1 and fell back two checkpoints" : ""}.<br>
         Progress dropped from <b>${current}</b> sessions to <b>${previousCheckpoint}</b> sessions.<br>
         Sessions count double until <b>${current}</b>.
       `
     });
 
-    ui.notifications.warn(`${actor.name} failed the checkpoint check and returned to the previous checkpoint.`);
+    ui.notifications.warn(`${actor.name} failed the checkpoint check and fell back ${naturalOne ? "two checkpoints (natural 1)" : "to the previous checkpoint"}.`);
   }
 
   return success;

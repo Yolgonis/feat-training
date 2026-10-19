@@ -15,7 +15,7 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 - Picks the checkpoint ability automatically from the character's class: the primary ability of the highest-level class (the higher score if the class has several), or the highest score without a class. The GM can override it or switch back to "Automatic (class)".
 - Rolls checkpoint checks as real dnd5e ability checks (advantage, exhaustion and bonuses apply) against a fixed DC of 15, and moves failed progress back to the previous checkpoint.
 - Checkpoints cannot be skipped: added sessions stop at the next checkpoint until its check is passed, and a passed checkpoint cannot be rolled again. Passed checkpoints survive session corrections (removing and re-adding sessions); only Reset clears them. Checkpoint markers turn green only once their check is passed.
-- Failing a checkpoint drops progress to the previous checkpoint, but sessions count double until the failed point is reached again (recovery). The tab shows the recovery state to the GM and the player.
+- Failing a checkpoint drops progress to the previous checkpoint, but sessions count double until the failed point is reached again (recovery). A natural 1 on the checkpoint check always fails, even if the total meets the DC, and drops progress two checkpoints back (the skipped checkpoint must be passed again); recovery lasts until the failed point. The tab shows the recovery state to the GM and the player.
 - The GM's Fail Checkpoint button only appears while the character is at a checkpoint.
 - Keeps the Feat Training Tracker tab open after sheet updates and rerenders.
 
