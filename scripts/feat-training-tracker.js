@@ -12,6 +12,7 @@ const CHECKPOINT_DC = 15;
 const FEAT_GOALS = { origin: 240, fightingStyle: 320, general: 480 };
 const FEAT_CATEGORY_LABELS = { origin: "Origin", fightingStyle: "Fighting Style", general: "General", epicBoon: "Epic Boon" };
 const ACTIVE_TABS = globalThis.FeatTrainingActiveTabs ??= new Map();
+const CHECKPOINT_ROLLS = new Set();
 
 const ABILITIES = {
   str: "Strength",
@@ -201,7 +202,8 @@ function getCheckpointSessions(targetSessions, checkpointCount) {
 // geçilmiş sayılır; tam üzerinde durulan checkpoint ise henüz geçilmemiştir.
 function getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount) {
   const stored = actor.getFlag(MODULE_ID, "clearedCheckpoint");
-  if (Number.isFinite(stored)) return Math.min(stored, sessions);
+  // Geçilmiş checkpoint, oturum düzeltmesiyle (ör. çıkarıp geri ekleme) kaybolmaz.
+  if (Number.isFinite(stored)) return stored;
   return getCheckpointSessions(targetSessions, checkpointCount).filter(value => value < sessions).pop() ?? 0;
 }
 
@@ -351,15 +353,14 @@ async function askGoal(currentGoal, autoGoal) {
   return Math.floor(value);
 }
 
-// Oturum sayısı veya checkpoint düzeni değiştiğinde geçilmiş checkpoint'i
-// yeni ilerlemeyle tutarlı tutar.
-async function setSessions(actor, sessions, targetSessions, checkpointCount) {
-  const cleared = getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount);
-  const valid = getCheckpointSessions(targetSessions, checkpointCount)
-    .filter(value => value <= cleared && value <= sessions).pop() ?? 0;
+// Oturum sayısını yazar. Geçilmiş checkpoint korunur (eski kayıtlarda değişiklikten
+// önceki ilerlemeye göre türetilip kalıcı yazılır); yalnızca Reset sıfırlar.
+async function setSessions(actor, sessions, targetSessions, checkpointCount, { resetCleared = false } = {}) {
+  const previous = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+  const cleared = resetCleared ? 0 : getClearedCheckpoint(actor, previous, targetSessions, checkpointCount);
   const update = {
     [`flags.${MODULE_ID}.sessions`]: sessions,
-    [`flags.${MODULE_ID}.clearedCheckpoint`]: valid
+    [`flags.${MODULE_ID}.clearedCheckpoint`]: cleared
   };
   if (!getRecoveryUntil(actor, sessions)) update[`flags.${MODULE_ID}.-=recoveryUntil`] = null;
   await actor.update(update);
@@ -371,12 +372,13 @@ function getPreviousCheckpoint(currentSessions, targetSessions, checkpointCount)
   return previous ?? 0;
 }
 
-function renderCheckpointMarkers(sessions, targetSessions, checkpointCount) {
+// İşaret yalnızca checkpoint zarı geçildiyse "tamamlandı" görünür.
+function renderCheckpointMarkers(clearedCheckpoint, targetSessions, checkpointCount) {
   const checkpoints = getCheckpointSessions(targetSessions, checkpointCount);
 
   return checkpoints.map(checkpointSessions => {
     const checkpointPercent = Math.round((checkpointSessions / targetSessions) * 100);
-    const completed = sessions >= checkpointSessions ? "completed" : "";
+    const completed = checkpointSessions <= clearedCheckpoint ? "completed" : "";
 
     return `
       <div
@@ -533,7 +535,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
       <div class="feat-training-card">
         <div class="feat-training-bar">
-          ${renderCheckpointMarkers(sessions, targetSessions, checkpointCount)}
+          ${renderCheckpointMarkers(clearedCheckpoint, targetSessions, checkpointCount)}
           <div class="feat-training-bar-fill" style="width: ${percent}%"></div>
         </div>
 
@@ -637,7 +639,22 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     </div>
   `;
 
-  tab.querySelector(".feat-training-checkpoint-roll")?.addEventListener("click", async () => {
+  tab.querySelector(".feat-training-checkpoint-roll")?.addEventListener("click", async event => {
+    // Çift tıklama: aynı karakter için süren bir checkpoint zarı varsa yenisi açılmaz.
+    const rollKey = getActorKey(actor);
+    if (CHECKPOINT_ROLLS.has(rollKey)) return;
+    CHECKPOINT_ROLLS.add(rollKey);
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await rollCheckpointFromTab();
+    } finally {
+      CHECKPOINT_ROLLS.delete(rollKey);
+      button.disabled = false;
+    }
+  });
+
+  async function rollCheckpointFromTab() {
     const ability = getMainAbility(actor);
 
     if (!ability) {
@@ -655,7 +672,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
     await rollCheckpointAbilityCheck(actor, ability, targetSessions, checkpointCount);
     await renderFeatTrainingTab(sheet, actor, tab);
-  });
+  }
 
   if (!game.user.isGM) return;
 
@@ -731,7 +748,10 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     if (value === null) return;
 
     const next = Math.min(value, targetSessions);
-    const cleared = getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0;
+    const cleared = Math.max(
+      getClearedCheckpoint(actor, current, targetSessions, checkpointCount),
+      getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0
+    );
     await actor.update({
       [`flags.${MODULE_ID}.sessions`]: next,
       [`flags.${MODULE_ID}.clearedCheckpoint`]: cleared,
@@ -842,7 +862,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
     if (!confirmReset) return;
 
-    await setSessions(actor, 0, targetSessions, checkpointCount);
+    await setSessions(actor, 0, targetSessions, checkpointCount, { resetCleared: true });
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 }
