@@ -449,14 +449,16 @@ async function askSessionAmount(title, defaultValue = 1, { min = 1, label = "Ses
   return Math.floor(value);
 }
 
-// Eğitim tamamlandı: sohbete duyurur, bağlı feat varsa karaktere verir.
+// Eğitim tamamlandı: sohbete duyurur. Feat otomatik verilmez; GM sekmedeki
+// "Grant Feat" düğmesiyle verir.
 async function completeTraining(actor) {
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content: `<b>${escapeHtml(actor.name)}</b> completed training: <b>${escapeHtml(actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME)}</b>.`
   });
-  if (actor.getFlag(MODULE_ID, "featUuid")) await grantFeat(actor);
-  else ui.notifications.info(`${actor.name} completed training.`);
+  ui.notifications.info(actor.getFlag(MODULE_ID, "featUuid")
+    ? `${actor.name} completed training. The GM can grant the feat from the training tab.`
+    : `${actor.name} completed training.`);
 }
 
 
