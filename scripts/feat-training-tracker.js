@@ -23,11 +23,29 @@ const ABILITIES = {
   cha: "Charisma"
 };
 
+Hooks.once("init", () => {
+  game.settings.register(MODULE_ID, "showToPlayers", {
+    name: "Show training tab to players",
+    hint: "When unchecked, players don't see the training tab on their character sheets. The GM always sees it.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true,
+    onChange: () => {
+      // Açık karakter sayfaları yeni görünürlüğe göre yeniden çizilir.
+      for (const app of foundry.applications.instances.values()) {
+        if (app.document?.documentName === "Actor") app.render();
+      }
+    }
+  });
+});
+
 Hooks.once("ready", () => {
   console.log(`${MODULE_ID} | Ready.`);
 });
 
 Hooks.on("renderCharacterActorSheet", async (sheet, html) => {
+  if (!game.user.isGM && !game.settings.get(MODULE_ID, "showToPlayers")) return;
   await injectTrainingTab(sheet, html);
 });
 

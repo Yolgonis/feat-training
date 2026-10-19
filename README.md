@@ -17,6 +17,7 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 - Checkpoints cannot be skipped: added sessions stop at the next checkpoint until its check is passed, and a passed checkpoint cannot be rolled again. Passed checkpoints survive session corrections (removing and re-adding sessions); only Reset clears them. Checkpoint markers turn green only once their check is passed.
 - Failing a checkpoint drops progress to the previous checkpoint, but sessions count double until the failed point is reached again (recovery). A natural 1 on the checkpoint check always fails, even if the total meets the DC, and drops progress two checkpoints back (the skipped checkpoint must be passed again); recovery lasts until the failed point. The tab shows the recovery state to the GM and the player.
 - Keeps the Feat Training Tracker tab open after sheet updates and rerenders.
+- Module setting **Show training tab to players** (on by default): when unchecked, players don't see the training tab; the GM always does.
 
 ## Usage
 
