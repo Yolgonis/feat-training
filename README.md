@@ -9,6 +9,8 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 - Adds a dedicated Feat Training Tracker tab to character and NPC sheets.
 - Tracks training sessions, total hours, remaining work, and completion percentage.
 - Link the feat being trained by dragging it onto the training tab (the feat is not added to the character). The goal is set automatically from the feat's category: Origin 240, Fighting Style 320, General 480 sessions. Epic Boons cannot be learned through training. The GM can set a manual goal or switch back to the automatic one; a manual goal on training already in progress is kept when a feat is linked.
+- When training completes, a chat message is posted and the linked feat is granted to the character through dnd5e's advancement flow (e.g. the feat's ability score increase). If the advancement is cancelled, a Grant Feat button stays on the tab.
+- Set Sessions writes the session count directly (GM decision): checkpoints below the new value count as passed, a value exactly on a checkpoint still requires its check.
 - Supports configurable checkpoint counts.
 - Picks the checkpoint ability automatically from the character's class: the primary ability of the highest-level class (the higher score if the class has several), or the highest score without a class. The GM can override it or switch back to "Automatic (class)".
 - Rolls checkpoint checks as real dnd5e ability checks (advantage, exhaustion and bonuses apply) against a fixed DC of 15, and moves failed progress back to the previous checkpoint.
@@ -19,7 +21,7 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 
 ## Usage
 
-Open a character sheet and select the graduation-cap tab. The GM links a feat by dragging it onto the tab and can configure the training name, goal, checkpoint count, and (optionally) the main ability.
+Open a character sheet and select the graduation-cap tab. The GM links a feat by dragging it onto the tab (the training is named after the feat) and can configure the goal, checkpoint count, and (optionally) the main ability.
 
 By default, one training session equals 4 downtime hours. The default feat training goal is 320 sessions.
 

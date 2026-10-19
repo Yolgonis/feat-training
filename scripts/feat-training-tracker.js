@@ -275,6 +275,8 @@ async function linkFeat(actor, item) {
   await actor.update({
     [`flags.${MODULE_ID}.featUuid`]: item.uuid,
     [`flags.${MODULE_ID}.featCategory`]: category,
+    [`flags.${MODULE_ID}.featIdentifier`]: item.system.identifier || null,
+    [`flags.${MODULE_ID}.featRepeatable`]: Boolean(item.system.prerequisites?.repeatable),
     [`flags.${MODULE_ID}.trainingName`]: item.name,
     ...(useAuto ? {
       [`flags.${MODULE_ID}.-=targetSessions`]: null,
@@ -286,6 +288,40 @@ async function linkFeat(actor, item) {
   if (useAuto) ui.notifications.info(`${actor.name} is now training ${item.name} (${FEAT_CATEGORY_LABELS[category]}, ${target} sessions).`);
   else if (keepManual) ui.notifications.info(`${actor.name} is now training ${item.name}; the manual goal of ${target} sessions was kept. Use Set Goal to switch to automatic.`);
   else ui.notifications.info(`${actor.name} is now training ${item.name}. This feat has no category; set the goal manually.`);
+  return true;
+}
+
+// Karakter bu feat'e zaten sahip mi? Tekrarlanabilir feat'ler (ör. ASI) her zaman verilebilir.
+function hasLinkedFeat(actor) {
+  const identifier = actor.getFlag(MODULE_ID, "featIdentifier");
+  const name = actor.getFlag(MODULE_ID, "trainingName");
+  if (actor.getFlag(MODULE_ID, "featRepeatable")) return false;
+  return actor.items.some(i => i.type === "feat"
+    && ((identifier && i.system?.identifier === identifier) || i.name === name));
+}
+
+// Bağlı feat'i karaktere ekler; dnd5e advancement adımları (ör. +1 yetenek) varsa pencereyi açar.
+async function grantFeat(actor) {
+  const feat = await fromUuid(actor.getFlag(MODULE_ID, "featUuid") ?? "");
+  if (!feat) {
+    ui.notifications.warn("The linked feat could not be found.");
+    return false;
+  }
+  if (hasLinkedFeat(actor)) {
+    ui.notifications.info(`${actor.name} already has ${feat.name}.`);
+    return false;
+  }
+  const itemData = feat.pack ? game.items.fromCompendium(feat) : feat.toObject();
+  if (!game.settings.get("dnd5e", "disableAdvancements")) {
+    const manager = dnd5e.applications.advancement.AdvancementManager.forNewItem(actor, itemData);
+    if (manager.steps.length) {
+      manager.render(true);
+      ui.notifications.info(`Complete the advancement to grant ${feat.name} to ${actor.name}.`);
+      return true;
+    }
+  }
+  await actor.createEmbeddedDocuments("Item", [itemData]);
+  ui.notifications.info(`${actor.name} learned ${feat.name}.`);
   return true;
 }
 
@@ -352,13 +388,13 @@ function renderCheckpointMarkers(sessions, targetSessions, checkpointCount) {
   }).join("");
 }
 
-async function askSessionAmount(title, defaultValue = 1) {
+async function askSessionAmount(title, defaultValue = 1, { min = 1 } = {}) {
   const value = await foundry.applications.api.DialogV2.prompt({
     window: { title },
     content: `
       <div class="form-group">
         <label>Session Count</label>
-        <input type="number" name="amount" value="${defaultValue}" min="1" step="1" autofocus>
+        <input type="number" name="amount" value="${defaultValue}" min="${min}" step="1" autofocus>
       </div>
     `,
     ok: {
@@ -370,31 +406,23 @@ async function askSessionAmount(title, defaultValue = 1) {
   });
   if (value === null || value === undefined) return null;
 
-  if (!Number.isFinite(value) || value <= 0) {
+  if (!Number.isFinite(value) || value < min) {
     ui.notifications.warn("Please enter a valid number.");
     return null;
   }
   return Math.floor(value);
 }
 
-async function askTrainingName(currentName = DEFAULT_TRAINING_NAME) {
-  const value = await foundry.applications.api.DialogV2.prompt({
-    window: { title: "Training Name" },
-    content: `
-      <div class="form-group">
-        <label>Training Name</label>
-        <input type="text" name="trainingName" value="${escapeHtml(currentName)}" autofocus>
-      </div>
-    `,
-    ok: {
-      icon: "fas fa-check",
-      label: "Save",
-      callback: (event, button) => button.form.elements.trainingName.value.trim()
-    },
-    rejectClose: false
+// Eğitim tamamlandı: sohbete duyurur, bağlı feat varsa karaktere verir.
+async function completeTraining(actor) {
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content: `<b>${escapeHtml(actor.name)}</b> completed training: <b>${escapeHtml(actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME)}</b>.`
   });
-  return value || null;
+  if (actor.getFlag(MODULE_ID, "featUuid")) await grantFeat(actor);
+  else ui.notifications.info(`${actor.name} completed training.`);
 }
+
 
 // Ana yetenek seçilmemişse en yüksek seviyeli sınıfın primary ability'si kullanılır;
 // birden fazlaysa (ör. Ranger: DEX/WIS) skoru yüksek olan, sınıf yoksa en yüksek skor.
@@ -479,6 +507,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   const goalIsManual = Number(actor.getFlag(MODULE_ID, "targetSessions")) > 0;
   const featCategory = actor.getFlag(MODULE_ID, "featCategory") ?? null;
   const featLinked = Boolean(actor.getFlag(MODULE_ID, "featUuid"));
+  const featGranted = featLinked && hasLinkedFeat(actor);
   const checkpointCount = normalizeCheckpointCount(
     actor.getFlag(MODULE_ID, "checkpointCount") ?? DEFAULT_CHECKPOINT_COUNT
   );
@@ -521,7 +550,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
               <p><b>Checkpoint DC:</b> ${checkpointDC}</p>
               ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> sessions count double until ${recoveryUntil}.</p>` : ""}
               ${checkpointReady ? `<p><b>Checkpoint:</b> Check required before more sessions can be added.</p>` : ""}
-              ${completed ? `<p class="feat-training-completed"><b>Training complete.</b></p>` : ""}
+              ${completed ? `<p class="feat-training-completed"><b>Training complete.</b>${featLinked ? (featGranted ? " Feat granted." : " Feat not granted yet.") : ""}</p>` : ""}
             `
             : `
               <p><b>Completion:</b> ${percent}%</p>
@@ -543,9 +572,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
         game.user.isGM
           ? `
             <div class="feat-training-actions">
-              <button type="button" class="feat-training-name">
-                <i class="fas fa-pen"></i> Training Name
-              </button>
 
               <button type="button" class="feat-training-add-custom">
                 <i class="fas fa-plus"></i> Add Sessions
@@ -553,6 +579,10 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
               <button type="button" class="feat-training-subtract-custom">
                 <i class="fas fa-minus"></i> Remove Sessions
+              </button>
+
+              <button type="button" class="feat-training-set-sessions">
+                <i class="fas fa-pen-to-square"></i> Set Sessions
               </button>
 
               <button type="button" class="feat-training-target">
@@ -582,6 +612,16 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
                   ? `
                     <button type="button" class="feat-training-checkpoint-back">
                       <i class="fas fa-arrow-rotate-left"></i> Fail Checkpoint
+                    </button>
+                  `
+                  : ""
+              }
+
+              ${
+                completed && featLinked && !featGranted
+                  ? `
+                    <button type="button" class="feat-training-grant">
+                      <i class="fas fa-award"></i> Grant Feat
                     </button>
                   `
                   : ""
@@ -649,16 +689,8 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     });
   }
 
-  tab.querySelector(".feat-training-name")?.addEventListener("click", async () => {
-    const currentName =
-      actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
-
-    const newName = await askTrainingName(currentName);
-    if (!newName) return;
-
-    await actor.setFlag(MODULE_ID, "trainingName", newName);
-
-    ui.notifications.info(`${actor.name}'s training name was updated.`);
+  tab.querySelector(".feat-training-grant")?.addEventListener("click", async () => {
+    await grantFeat(actor);
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 
@@ -680,13 +712,34 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
     await setSessions(actor, next, targetSessions, checkpointCount);
 
-    if (next >= targetSessions) {
-      ui.notifications.info(`${actor.name} completed training.`);
+    if (next >= targetSessions && current < targetSessions) {
+      await completeTraining(actor);
     } else if (next < current + gain) {
       ui.notifications.info(`${actor.name} reached a checkpoint at ${next} sessions; the remaining sessions were not added.`);
     } else if (gain > amount) {
       ui.notifications.info(`${actor.name} is recovering: ${amount} sessions counted as ${gain}.`);
     }
+
+    await renderFeatTrainingTab(sheet, actor, tab);
+  });
+
+  // Oturum sayısını doğrudan yazar (GM kararı): değerin altındaki checkpoint'ler geçilmiş sayılır,
+  // değer tam bir checkpoint'teyse onun zarı yine istenir.
+  tab.querySelector(".feat-training-set-sessions")?.addEventListener("click", async () => {
+    const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+    const value = await askSessionAmount("Set session count", current, { min: 0 });
+    if (value === null) return;
+
+    const next = Math.min(value, targetSessions);
+    const cleared = getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0;
+    await actor.update({
+      [`flags.${MODULE_ID}.sessions`]: next,
+      [`flags.${MODULE_ID}.clearedCheckpoint`]: cleared,
+      ...(getRecoveryUntil(actor, next) ? {} : { [`flags.${MODULE_ID}.-=recoveryUntil`]: null })
+    });
+
+    if (next >= targetSessions && current < targetSessions) await completeTraining(actor);
+    else ui.notifications.info(`${actor.name}'s sessions were set to ${next}.`);
 
     await renderFeatTrainingTab(sheet, actor, tab);
   });
