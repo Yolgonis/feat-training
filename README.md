@@ -8,7 +8,7 @@ The module adds a graduation-cap tab to character sheets. Game Masters can set a
 
 - Adds a dedicated Feat Training Tracker tab to character and NPC sheets.
 - Tracks training sessions, total hours, remaining work, and completion percentage.
-- Link the feat being trained by dragging it onto the training tab (the feat is not added to the character). The goal is set automatically from the feat's category: Origin 120, Fighting Style 160, General 240 sessions. Epic Boons cannot be learned through training. The GM can set a manual goal or switch back to the automatic one; a manual goal on training already in progress is kept when a feat is linked.
+- Link the feat being trained by dragging it onto the training tab (the feat is not added to the character). The goal is set automatically from the feat's category: Origin 240, Fighting Style 320, General 480 sessions. Epic Boons cannot be learned through training. The GM can set a manual goal or switch back to the automatic one; a manual goal on training already in progress is kept when a feat is linked.
 - Supports configurable checkpoint counts.
 - Picks the checkpoint ability automatically from the character's class: the primary ability of the highest-level class (the higher score if the class has several), or the highest score without a class. The GM can override it or switch back to "Automatic (class)".
 - Rolls checkpoint checks as real dnd5e ability checks (advantage, exhaustion and bonuses apply) against a fixed DC of 15, and moves failed progress back to the previous checkpoint.

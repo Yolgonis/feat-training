@@ -9,7 +9,7 @@ const TAB_ID = "feat-training";
 const CHECKPOINT_DC = 15;
 
 // Feat kategorisine göre otomatik hedef (oturum). Epic Boon eğitimle öğrenilemez.
-const FEAT_GOALS = { origin: 120, fightingStyle: 160, general: 240 };
+const FEAT_GOALS = { origin: 240, fightingStyle: 320, general: 480 };
 const FEAT_CATEGORY_LABELS = { origin: "Origin", fightingStyle: "Fighting Style", general: "General", epicBoon: "Epic Boon" };
 const ACTIVE_TABS = globalThis.FeatTrainingActiveTabs ??= new Map();
 
