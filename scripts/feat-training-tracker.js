@@ -188,13 +188,20 @@ function normalizeCheckpointCount(value) {
   return Math.floor(count);
 }
 
+// Hedef eşit parçalara bölünür; her parçanın sonu bir checkpoint'tir. Son checkpoint
+// hedefin kendisidir (%100): eğitim ancak onun zarı geçilince tamamlanır.
 function getCheckpointSessions(targetSessions, checkpointCount) {
   const count = normalizeCheckpointCount(checkpointCount);
 
-  return Array.from({ length: Math.max(count - 1, 0) }, (_, index) => {
+  return Array.from({ length: count }, (_, index) => {
     const checkpointNumber = index + 1;
     return Math.round((targetSessions / count) * checkpointNumber);
-  }).filter(value => value > 0 && value < targetSessions);
+  }).filter((value, index, all) => value > 0 && value <= targetSessions && all.indexOf(value) === index);
+}
+
+function isTrainingComplete(actor, sessions, targetSessions, checkpointCount) {
+  return sessions >= targetSessions
+    && getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount) >= targetSessions;
 }
 
 // En yüksek geçilmiş checkpoint (oturum sayısı olarak). Flag yoksa (eski
@@ -484,7 +491,8 @@ async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkp
       [`flags.${MODULE_ID}.clearedCheckpoint`]: current,
       [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     });
-    ui.notifications.info(`${actor.name} passed the checkpoint check.`);
+    if (current >= targetSessions) await completeTraining(actor);
+    else ui.notifications.info(`${actor.name} passed the checkpoint check.`);
   } else {
     const previousCheckpoint = await failCheckpoint(actor, current, targetSessions, checkpointCount);
 
@@ -523,7 +531,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   const remainingSessions = Math.max(targetSessions - sessions, 0);
   const remainingHours = remainingSessions * HOURS_PER_SESSION;
   const percent = Math.min(100, Math.round((sessions / targetSessions) * 100));
-  const completed = sessions >= targetSessions;
+  const completed = isTrainingComplete(actor, sessions, targetSessions, checkpointCount);
   const clearedCheckpoint = getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount);
   const checkpointReady = isAtCheckpoint(sessions, targetSessions, checkpointCount, clearedCheckpoint);
   const checkpointDC = getCheckpointDC();
@@ -551,7 +559,9 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
               <p><b>Main Ability:</b> ${mainAbility ? ABILITIES[mainAbility] : "Not set"}${mainAbility && abilityIsAuto ? " (automatic)" : ""}</p>
               <p><b>Checkpoint DC:</b> ${checkpointDC}</p>
               ${recoveryUntil ? `<p class="feat-training-recovery"><b>Recovery:</b> sessions count double until ${recoveryUntil}.</p>` : ""}
-              ${checkpointReady ? `<p><b>Checkpoint:</b> Check required before more sessions can be added.</p>` : ""}
+              ${checkpointReady ? (sessions >= targetSessions
+                ? `<p><b>Final Checkpoint:</b> Pass this check to complete training.</p>`
+                : `<p><b>Checkpoint:</b> Check required before more sessions can be added.</p>`) : ""}
               ${completed ? `<p class="feat-training-completed"><b>Training complete.</b>${featLinked ? (featGranted ? " Feat granted." : " Feat not granted yet.") : ""}</p>` : ""}
             `
             : `
@@ -677,14 +687,13 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   if (!game.user.isGM) return;
 
   tab.querySelector(".feat-training-checkpoint-count")?.addEventListener("click", async () => {
-    // Kayıtlı değer hedefin kaç parçaya bölündüğüdür; checkpoint sayısı bir eksiğidir
-    // (hedefe ulaşmak checkpoint değildir). GM doğrudan checkpoint sayısını girer.
-    const amount = await askSessionAmount("Number of checkpoints", checkpointCount - 1, { min: 0, label: "Checkpoints" });
+    // Son checkpoint hedefin kendisidir; girilen sayı checkpoint sayısıdır.
+    const amount = await askSessionAmount("Number of checkpoints", checkpointCount, { label: "Checkpoints" });
     if (amount === null) return;
 
     // Checkpoint konumları değişti; geçilmiş checkpoint yeni düzene göre yeniden türetilir.
     await actor.update({
-      [`flags.${MODULE_ID}.checkpointCount`]: amount + 1,
+      [`flags.${MODULE_ID}.checkpointCount`]: amount,
       [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
       [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     });
@@ -732,7 +741,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     await setSessions(actor, next, targetSessions, checkpointCount);
 
     if (next >= targetSessions && current < targetSessions) {
-      await completeTraining(actor);
+      ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
     } else if (next < current + gain) {
       ui.notifications.info(`${actor.name} reached a checkpoint at ${next} sessions; the remaining sessions were not added.`);
     } else if (gain > amount) {
@@ -760,8 +769,9 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
       ...(getRecoveryUntil(actor, next) ? {} : { [`flags.${MODULE_ID}.-=recoveryUntil`]: null })
     });
 
-    if (next >= targetSessions && current < targetSessions) await completeTraining(actor);
-    else ui.notifications.info(`${actor.name}'s sessions were set to ${next}.`);
+    if (next >= targetSessions && current < targetSessions) {
+      ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
+    } else ui.notifications.info(`${actor.name}'s sessions were set to ${next}.`);
 
     await renderFeatTrainingTab(sheet, actor, tab);
   });
