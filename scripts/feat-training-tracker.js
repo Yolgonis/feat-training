@@ -44,8 +44,23 @@ Hooks.once("ready", () => {
   console.log(`${MODULE_ID} | Ready.`);
 });
 
+// Sekme oyunculardan gizliyken oyuncu yalnızca checkpoint zarı gerektiğinde sekmeyi görür.
+function isPlayerViewLimited() {
+  return !game.user.isGM && !game.settings.get(MODULE_ID, "showToPlayers");
+}
+
+function isCheckpointDue(actor) {
+  if (!actor.getFlag(MODULE_ID, "featUuid")) return false;
+  const sessions = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+  const targetSessions = getTargetSessions(actor);
+  const checkpointCount = normalizeCheckpointCount(actor.getFlag(MODULE_ID, "checkpointCount") ?? DEFAULT_CHECKPOINT_COUNT);
+  if (isTrainingComplete(actor, sessions, targetSessions, checkpointCount)) return false;
+  const cleared = getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount);
+  return isAtCheckpoint(sessions, targetSessions, checkpointCount, cleared);
+}
+
 Hooks.on("renderCharacterActorSheet", async (sheet, html) => {
-  if (!game.user.isGM && !game.settings.get(MODULE_ID, "showToPlayers")) return;
+  if (isPlayerViewLimited() && !isCheckpointDue(sheet.actor)) return;
   await injectTrainingTab(sheet, html);
 });
 
@@ -598,7 +613,15 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
       </div>`;
   }
 
-  tab.innerHTML = `
+  if (isPlayerViewLimited()) {
+    // Gizli mod: ilerleme gösterilmez, yalnızca checkpoint zarı.
+    tab.innerHTML = `
+      <div class="feat-training-content ft">
+        <header class="ft-header"><div class="ft-title"><span class="ft-eyebrow">Feat Training</span><h2>Checkpoint</h2></div></header>
+        ${checkpointReady && !completed ? banner : `<div class="ft-banner"><i class="fas fa-check"></i><div class="ft-banner-text"><strong>Nothing to roll</strong></div></div>`}
+      </div>
+    `;
+  } else tab.innerHTML = `
     <div class="feat-training-content ft">
       <header class="ft-header">
         <div class="ft-title">
