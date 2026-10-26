@@ -44,6 +44,7 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "goalFightingStyle", { name: "Goal: Fighting Style feats (sessions)", hint: "Automatic goal for Fighting Style feats.", scope: "world", config: true, type: Number, default: 320 });
   game.settings.register(MODULE_ID, "goalGeneral", { name: "Goal: General feats (sessions)", hint: "Automatic goal for General feats.", scope: "world", config: true, type: Number, default: 480 });
   game.settings.register(MODULE_ID, "defaultCheckpointCount", { name: "Checkpoints per training", hint: "Default number of checkpoints for new trainings.", scope: "world", config: true, type: Number, default: 10 });
+  game.settings.register(MODULE_ID, "recoveryEnabled", { name: "Double progress after a failed checkpoint", hint: "When unchecked, a failed checkpoint only sets the training back; there is no faster catch-up.", scope: "world", config: true, type: Boolean, default: true });
   game.settings.register(MODULE_ID, "recoveryMultiplier", { name: "Recovery speed", hint: "Sessions count this many times after a failed checkpoint (1 disables the bonus).", scope: "world", config: true, type: Number, default: 2 });
   game.settings.register(MODULE_ID, "naturalOneSteps", { name: "Natural 1 setback (checkpoints)", hint: "How many checkpoints a natural 1 sets the training back (1 = same as a normal failure).", scope: "world", config: true, type: Number, default: 2 });
   game.settings.register(MODULE_ID, "hoursPerSession", { name: "Hours per session", hint: "Used for the remaining-hours display.", scope: "world", config: true, type: Number, default: 4 });
@@ -314,6 +315,7 @@ function getNextBlockingCheckpoint(clearedCheckpoint, targetSessions, checkpoint
 
 
 function getRecoveryUntil(actor, sessions) {
+  if (!game.settings.get(MODULE_ID, "recoveryEnabled")) return null;
   const until = Number(actor.getFlag(MODULE_ID, "recoveryUntil"));
   return Number.isFinite(until) && until > sessions ? until : null;
 }
@@ -568,7 +570,7 @@ async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkp
       content: `
         <b>${escapeHtml(actor.name)}</b> failed the checkpoint check${naturalOne ? " with a natural 1 and fell back two checkpoints" : ""}.<br>
         Progress dropped from <b>${current}</b> sessions to <b>${previousCheckpoint}</b> sessions.<br>
-        Sessions count double until <b>${current}</b>.
+        ${game.settings.get(MODULE_ID, "recoveryEnabled") ? `Sessions count double until <b>${current}</b>.` : ""}
       `
     });
 
