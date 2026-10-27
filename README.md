@@ -2,28 +2,35 @@
 
 Feat Training Tracker is a Foundry VTT module for tracking downtime progress toward earning feats. It is designed for use with the Foundry VTT `dnd5e` system and keeps feat training progress visible directly on actor sheets.
 
-The module adds a graduation-cap tab to character sheets. Game Masters can set a training goal, choose a main ability, add or remove training sessions, configure checkpoints, and roll checkpoint checks. Players can view their progress and roll available checkpoint checks when the character reaches one.
+The module adds a graduation-cap tab to character sheets. The GM links a feat, adds the hours trained during downtime, and the character rolls a checkpoint ability check at each checkpoint until the feat is earned.
 
 ## Features
 
-- Adds a dedicated Feat Training Tracker tab to character and NPC sheets.
-- Tracks training hours, remaining work, and completion percentage.
-- Link the feat being trained by dragging it onto the training tab (the feat is not added to the character). The goal is set automatically from the feat's category: Origin 960, Fighting Style 1280, General 1920 hours. Epic Boons cannot be learned through training. The GM can set a manual goal or switch back to the automatic one; a manual goal on training already in progress is kept when a feat is linked.
-- The last checkpoint sits at 100% of the goal: training completes only when that final check is passed. Then a chat message is posted and the GM grants the linked feat with the Grant Feat button on the tab, through dnd5e's advancement flow (e.g. the feat's ability score increase). The feat is not granted automatically. Once the feat is on the character, the training resets so a new feat can be dragged in.
-- Set Hours writes the hour count directly (GM decision): checkpoints below the new value count as passed, a value exactly on a checkpoint still requires its check.
-- Each goal is split into 10 checkpoints; the last one is at 100%.
-- Picks the checkpoint ability automatically from the character's class: the primary ability of the highest-level class (the higher score if the class has several), or the highest score without a class.
-- Rolls checkpoint checks as real dnd5e ability checks (advantage, exhaustion and bonuses apply) against a fixed DC of 15, and moves failed progress back to the previous checkpoint.
-- Checkpoints cannot be skipped: added hours stop at the next checkpoint until its check is passed, and a passed checkpoint cannot be rolled again. Passed checkpoints survive corrections (removing and re-adding hours); only Reset clears them. Checkpoint markers turn green only once their check is passed.
-- Failing a checkpoint drops progress to the previous checkpoint, but hours count double until the failed point is reached again (recovery). A natural 1 on the checkpoint check always fails, even if the total meets the DC, and drops progress two checkpoints back (the skipped checkpoint must be passed again); recovery lasts until the failed point. The tab shows the recovery state to the GM and the player.
-- Keeps the Feat Training Tracker tab open after sheet updates and rerenders.
-- Module setting **Show training tab to players** (on by default): when unchecked, players don't see the training tab; the GM always does.
+- Adds a Feat Training tab to character and NPC sheets (NPC sheets: GM only).
+- **Progress is tracked in hours**, so sessions of any length (2, 5 or 8 hours) count correctly. Add Hours takes the hours trained; Set Hours writes the total directly (checkpoints below the new value count as passed, a value exactly on a checkpoint still requires its check).
+- Drag a feat onto the tab to start training (the feat is not added to the character). The goal comes from the feat's category: Origin 960, Fighting Style 1280, General 1920 hours. Epic Boons are not trainable unless allowed in the settings. The GM can set a manual goal (Set Goal) or switch back to the automatic one; a manual goal on training in progress is kept when a feat is linked.
+- The goal is split into 10 checkpoints; the last one sits at 100%. Checkpoints cannot be skipped: added hours stop at the next checkpoint until its check is passed. Passed checkpoints survive corrections; only Reset clears them.
+- Checkpoint checks are real dnd5e ability checks (advantage, exhaustion and bonuses apply) against DC 15. The ability is picked automatically from the character's class (primary ability of the highest-level class, the higher score if there are several; without a class, the highest score).
+- **Failure and recovery:** a failed check drops progress to the previous checkpoint, and hours count double until the failed point is reached again. A natural 1 always fails and drops progress two checkpoints back. The tab shows the recovery state to GM and player.
+- **Completion:** passing the final check posts a chat message. The GM then grants the linked feat with Grant Feat, through dnd5e's advancement flow (e.g. the feat's ability score increase). The training resets once the feat is on the character.
+- The tab stays open after sheet updates and re-renders.
+
+## Settings
+
+All settings are world settings, changed by the GM. Defaults are the standard rules above.
+
+- **Show training tab to players** (on): when off, players don't see the tab. When one of their characters reaches a checkpoint, they get a minimal tab with just the Roll button (no progress shown); it disappears after the roll.
+- **Checkpoint DC**, **Checkpoints per training**.
+- **Goal hours** for Origin, Fighting Style and General feats.
+- **Double progress after a failed checkpoint** (on) and **Recovery speed** (the multiplier, default 2).
+- **Natural 1 setback** (checkpoints dropped on a natural 1, default 2; 1 = same as a normal failure).
+- **Allow Epic Boon training** (off): Epic Boons use the General goal.
 
 ## Usage
 
-Open a character sheet and select the graduation-cap tab. The GM links a feat by dragging it onto the tab (the training is named after the feat) adds the hours trained as downtime passes. The GM panel only holds Add Hours, Set Hours (direct correction), Set Goal and Reset; checkpoint checks, failures, recovery, the main ability and the checkpoint layout are handled automatically.
+Open a character sheet and select the graduation-cap tab. The GM panel holds Add Hours, Set Hours (direct correction), Set Goal and Reset. Checkpoint checks, failures, recovery, the main ability and the checkpoint layout are handled automatically.
 
-Progress is tracked in hours, so sessions of any length (2, 5 or 8 hours) count correctly. The default goals are Origin 960, Fighting Style 1280 and General 1920 hours. Training saved in sessions by older versions is converted once (1 session = 4 hours) when the GM loads the world.
+Training saved in sessions by versions before 3.0.0 is converted once (1 session = 4 hours) when the GM first loads the world.
 
 ## Installation
 
