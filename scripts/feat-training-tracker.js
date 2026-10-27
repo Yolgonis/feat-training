@@ -1,13 +1,14 @@
 (() => {
 
 const MODULE_ID = "feat-training";
-const DEFAULT_TARGET_SESSIONS = 320;
+const DEFAULT_TARGET_SESSIONS = 1280; // saat
 const DEFAULT_TRAINING_NAME = "Feat Training Tracker";
 const TAB_ID = "feat-training";
 const CHECKPOINT_DC = 15;
 
-// Feat kategorisine göre otomatik hedef (oturum). Epic Boon eğitimle öğrenilemez.
-const FEAT_GOALS_DEFAULT = { origin: 240, fightingStyle: 320, general: 480 };
+// İlerleme saat cinsindendir (oturumlar farklı uzunlukta olabilir). Kategoriye göre otomatik hedef.
+const FEAT_GOALS_DEFAULT = { origin: 960, fightingStyle: 1280, general: 1920 };
+const LEGACY_HOURS_PER_SESSION = 4;
 const FEAT_CATEGORY_LABELS = { origin: "Origin", fightingStyle: "Fighting Style", general: "General", epicBoon: "Epic Boon" };
 // Ayarlardan değiştirilebilen kurallar; varsayılanlar Vaelora standartlarıdır.
 function cfg(key, fallback) {
@@ -16,16 +17,15 @@ function cfg(key, fallback) {
 }
 function getFeatGoals() {
   return {
-    origin: cfg("goalOrigin", FEAT_GOALS_DEFAULT.origin),
-    fightingStyle: cfg("goalFightingStyle", FEAT_GOALS_DEFAULT.fightingStyle),
-    general: cfg("goalGeneral", FEAT_GOALS_DEFAULT.general),
-    epicBoon: cfg("goalGeneral", FEAT_GOALS_DEFAULT.general)
+    origin: cfg("goalOriginHours", FEAT_GOALS_DEFAULT.origin),
+    fightingStyle: cfg("goalFightingStyleHours", FEAT_GOALS_DEFAULT.fightingStyle),
+    general: cfg("goalGeneralHours", FEAT_GOALS_DEFAULT.general),
+    epicBoon: cfg("goalGeneralHours", FEAT_GOALS_DEFAULT.general)
   };
 }
 function getDefaultCheckpointCount() { return Math.round(cfg("defaultCheckpointCount", 10)); }
 function getRecoveryMultiplier() { return cfg("recoveryMultiplier", 2); }
 function getNaturalOneSteps() { return Math.round(cfg("naturalOneSteps", 2)); }
-function getHoursPerSession() { return cfg("hoursPerSession", 4); }
 const ACTIVE_TABS = globalThis.FeatTrainingActiveTabs ??= new Map();
 const CHECKPOINT_ROLLS = new Set();
 
@@ -40,14 +40,14 @@ const ABILITIES = {
 
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "checkpointDC", { name: "Checkpoint DC", hint: "Difficulty of the checkpoint ability check.", scope: "world", config: true, type: Number, default: 15 });
-  game.settings.register(MODULE_ID, "goalOrigin", { name: "Goal: Origin feats (sessions)", hint: "Automatic goal for Origin feats.", scope: "world", config: true, type: Number, default: 240 });
-  game.settings.register(MODULE_ID, "goalFightingStyle", { name: "Goal: Fighting Style feats (sessions)", hint: "Automatic goal for Fighting Style feats.", scope: "world", config: true, type: Number, default: 320 });
-  game.settings.register(MODULE_ID, "goalGeneral", { name: "Goal: General feats (sessions)", hint: "Automatic goal for General feats.", scope: "world", config: true, type: Number, default: 480 });
+  game.settings.register(MODULE_ID, "goalOriginHours", { name: "Goal: Origin feats (hours)", hint: "Automatic goal for Origin feats.", scope: "world", config: true, type: Number, default: 960 });
+  game.settings.register(MODULE_ID, "goalFightingStyleHours", { name: "Goal: Fighting Style feats (hours)", hint: "Automatic goal for Fighting Style feats.", scope: "world", config: true, type: Number, default: 1280 });
+  game.settings.register(MODULE_ID, "goalGeneralHours", { name: "Goal: General feats (hours)", hint: "Automatic goal for General feats.", scope: "world", config: true, type: Number, default: 1920 });
   game.settings.register(MODULE_ID, "defaultCheckpointCount", { name: "Checkpoints per training", hint: "Default number of checkpoints for new trainings.", scope: "world", config: true, type: Number, default: 10 });
   game.settings.register(MODULE_ID, "recoveryEnabled", { name: "Double progress after a failed checkpoint", hint: "When unchecked, a failed checkpoint only sets the training back; there is no faster catch-up.", scope: "world", config: true, type: Boolean, default: true });
-  game.settings.register(MODULE_ID, "recoveryMultiplier", { name: "Recovery speed", hint: "Sessions count this many times after a failed checkpoint (1 disables the bonus).", scope: "world", config: true, type: Number, default: 2 });
+  game.settings.register(MODULE_ID, "recoveryMultiplier", { name: "Recovery speed", hint: "Hours count this many times after a failed checkpoint (1 disables the bonus).", scope: "world", config: true, type: Number, default: 2 });
   game.settings.register(MODULE_ID, "naturalOneSteps", { name: "Natural 1 setback (checkpoints)", hint: "How many checkpoints a natural 1 sets the training back (1 = same as a normal failure).", scope: "world", config: true, type: Number, default: 2 });
-  game.settings.register(MODULE_ID, "hoursPerSession", { name: "Hours per session", hint: "Used for the remaining-hours display.", scope: "world", config: true, type: Number, default: 4 });
+  game.settings.register(MODULE_ID, "hoursMigrated", { scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "allowEpicBoon", { name: "Allow Epic Boon training", hint: "Lets the GM link Epic Boons. They use the General goal.", scope: "world", config: true, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "showToPlayers", {
     name: "Show training tab to players",
@@ -65,9 +65,30 @@ Hooks.once("init", () => {
   });
 });
 
-Hooks.once("ready", () => {
+Hooks.once("ready", async () => {
   console.log(`${MODULE_ID} | Ready.`);
+  if (game.users.activeGM?.isSelf && !game.settings.get(MODULE_ID, "hoursMigrated")) await migrateToHours();
 });
+
+// Eski kayıtlar oturum cinsindendi; bir kerelik saate çevrilir (1 oturum = 4 saat).
+async function migrateToHours() {
+  const keys = ["sessions", "targetSessions", "clearedCheckpoint", "recoveryUntil"];
+  let count = 0;
+  for (const actor of game.actors) {
+    const update = {};
+    for (const key of keys) {
+      const stored = actor.getFlag(MODULE_ID, key);
+      if (stored === undefined || stored === null) continue;
+      const value = Number(stored);
+      if (Number.isFinite(value)) update[`flags.${MODULE_ID}.${key}`] = value * LEGACY_HOURS_PER_SESSION;
+    }
+    if (!Object.keys(update).length) continue;
+    await actor.update(update);
+    count++;
+  }
+  await game.settings.set(MODULE_ID, "hoursMigrated", true);
+  if (count) ui.notifications.info(`Feat Training: ${count} character(s) converted from sessions to hours.`);
+}
 
 // Sekme oyunculardan gizliyken oyuncu yalnızca checkpoint zarı gerektiğinde sekmeyi görür.
 function isPlayerViewLimited() {
@@ -395,8 +416,8 @@ async function linkFeat(actor, item) {
       [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     } : {})
   });
-  if (useAuto) ui.notifications.info(`${actor.name} is now training ${item.name} (${FEAT_CATEGORY_LABELS[category]}, ${target} sessions).`);
-  else if (keepManual) ui.notifications.info(`${actor.name} is now training ${item.name}; the manual goal of ${target} sessions was kept. Use Set Goal to switch to automatic.`);
+  if (useAuto) ui.notifications.info(`${actor.name} is now training ${item.name} (${FEAT_CATEGORY_LABELS[category]}, ${target} hours).`);
+  else if (keepManual) ui.notifications.info(`${actor.name} is now training ${item.name}; the manual goal of ${target} hours was kept. Use Set Goal to switch to automatic.`);
   else ui.notifications.info(`${actor.name} is now training ${item.name}. This feat has no category; set the goal manually.`);
   return true;
 }
@@ -445,7 +466,7 @@ async function askGoal(currentGoal, autoGoal) {
     window: { title: "Set Goal" },
     content: `
       <div class="form-group">
-        <label>Target Sessions</label>
+        <label>Target Hours</label>
         <input type="number" name="amount" value="${currentGoal}" min="1" step="1" autofocus>
       </div>
     `,
@@ -480,11 +501,11 @@ function renderCheckpointMarkers(sessions, clearedCheckpoint, targetSessions, ch
     const percent = (checkpointSessions / targetSessions) * 100;
     const state = checkpointSessions <= clearedCheckpoint ? "passed"
       : checkpointSessions === sessions ? "pending" : "upcoming";
-    return `<span class="ft-marker ${state}" style="left: ${percent}%" title="${checkpointSessions} sessions"></span>`;
+    return `<span class="ft-marker ${state}" style="left: ${percent}%" title="${checkpointSessions} h"></span>`;
   }).join("");
 }
 
-async function askSessionAmount(title, defaultValue = 1, { min = 1, label = "Session Count" } = {}) {
+async function askSessionAmount(title, defaultValue = 1, { min = 1, label = "Hours" } = {}) {
   const value = await foundry.applications.api.DialogV2.prompt({
     window: { title },
     content: `
@@ -569,8 +590,8 @@ async function rollCheckpointAbilityCheck(actor, ability, targetSessions, checkp
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `
         <b>${escapeHtml(actor.name)}</b> failed the checkpoint check${naturalOne ? " with a natural 1 and fell back two checkpoints" : ""}.<br>
-        Progress dropped from <b>${current}</b> sessions to <b>${previousCheckpoint}</b> sessions.<br>
-        ${game.settings.get(MODULE_ID, "recoveryEnabled") ? `Sessions count double until <b>${current}</b>.` : ""}
+        Progress dropped from <b>${current}</b> hours to <b>${previousCheckpoint}</b> hours.<br>
+        ${game.settings.get(MODULE_ID, "recoveryEnabled") ? `Hours count double until <b>${current}</b>.` : ""}
       `
     });
 
@@ -596,7 +617,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
 
   const remainingSessions = Math.max(targetSessions - sessions, 0);
-  const remainingHours = remainingSessions * getHoursPerSession();
   const percent = Math.min(100, Math.round((sessions / targetSessions) * 100));
   const completed = isTrainingComplete(actor, sessions, targetSessions, checkpointCount);
   const clearedCheckpoint = getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount);
@@ -635,7 +655,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
       <div class="ft-banner ft-banner-recovery">
         <i class="fas fa-forward"></i>
         <div class="ft-banner-text"><strong>Recovery</strong>
-          <span>Sessions count double until ${recoveryUntil}.</span></div>
+          <span>Hours count double until ${recoveryUntil} h.</span></div>
       </div>`;
   }
 
@@ -666,14 +686,14 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
         </div>
         <div class="ft-progress-meta">
           <span class="ft-percent">${percent}%</span>
-          ${isGM ? `<span>${sessions} / ${targetSessions} sessions <em>· ${goalNote}</em></span>` : ""}
+          ${isGM ? `<span>${sessions} / ${targetSessions} hours <em>· ${goalNote}</em></span>` : ""}
         </div>
       </section>
 
       <section class="ft-stats">
         ${isGM ? `
-          <div class="ft-stat"><span class="ft-stat-value">${remainingSessions}</span><span class="ft-stat-label">sessions left · ${remainingHours} h</span></div>` : ""}
-        <div class="ft-stat"><span class="ft-stat-value">${completed ? "—" : checkpointReady ? "Now" : sessionsToNext}</span><span class="ft-stat-label">${completed ? "all checkpoints passed" : checkpointReady ? "checkpoint check" : "sessions to next checkpoint"}</span></div>
+          <div class="ft-stat"><span class="ft-stat-value">${remainingSessions}</span><span class="ft-stat-label">hours left</span></div>` : ""}
+        <div class="ft-stat"><span class="ft-stat-value">${completed ? "—" : checkpointReady ? "Now" : sessionsToNext}</span><span class="ft-stat-label">${completed ? "all checkpoints passed" : checkpointReady ? "checkpoint check" : "hours to next checkpoint"}</span></div>
         <div class="ft-stat"><span class="ft-stat-value">${abilityLabel}</span><span class="ft-stat-label">check · DC ${checkpointDC}${isGM && mainAbility && abilityIsAuto ? " · from class" : ""}</span></div>
       </section>
 
@@ -681,8 +701,8 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
       ${isGM ? `
         <footer class="ft-actions">
-          <button type="button" class="feat-training-add-custom" data-tooltip="Add sessions"><i class="fas fa-plus"></i> Add</button>
-          <button type="button" class="feat-training-set-sessions" data-tooltip="Set the session count directly"><i class="fas fa-pen-to-square"></i> Set</button>
+          <button type="button" class="feat-training-add-custom" data-tooltip="Add hours"><i class="fas fa-plus"></i> Add</button>
+          <button type="button" class="feat-training-set-sessions" data-tooltip="Set the hours directly"><i class="fas fa-pen-to-square"></i> Set</button>
           <button type="button" class="feat-training-target" data-tooltip="Set the goal"><i class="fas fa-bullseye"></i> Goal</button>
           <button type="button" class="feat-training-reset ft-danger" data-tooltip="Reset training"><i class="fas fa-rotate-left"></i> Reset</button>
         </footer>` : ""}
@@ -748,14 +768,14 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   });
 
   tab.querySelector(".feat-training-add-custom")?.addEventListener("click", async () => {
-    const amount = await askSessionAmount("How many sessions should be added?", 1);
+    const amount = await askSessionAmount("How many hours were trained?", 4);
     if (amount === null) return;
 
     const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
     const cleared = getClearedCheckpoint(actor, current, targetSessions, checkpointCount);
 
     if (isAtCheckpoint(current, targetSessions, checkpointCount, cleared)) {
-      ui.notifications.warn(`${actor.name} must pass the checkpoint check before more sessions can be added.`);
+      ui.notifications.warn(`${actor.name} must pass the checkpoint check before more hours can be added.`);
       return;
     }
 
@@ -768,9 +788,9 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     if (next >= targetSessions && current < targetSessions) {
       ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
     } else if (next < current + gain) {
-      ui.notifications.info(`${actor.name} reached a checkpoint at ${next} sessions; the remaining sessions were not added.`);
+      ui.notifications.info(`${actor.name} reached a checkpoint at ${next} h; the remaining hours were not added.`);
     } else if (gain > amount) {
-      ui.notifications.info(`${actor.name} is recovering: ${amount} sessions counted as ${gain}.`);
+      ui.notifications.info(`${actor.name} is recovering: ${amount} hours counted as ${gain}.`);
     }
 
     await renderFeatTrainingTab(sheet, actor, tab);
@@ -780,7 +800,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   // değer tam bir checkpoint'teyse onun zarı yine istenir.
   tab.querySelector(".feat-training-set-sessions")?.addEventListener("click", async () => {
     const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-    const value = await askSessionAmount("Set session count", current, { min: 0 });
+    const value = await askSessionAmount("Set hours", current, { min: 0 });
     if (value === null) return;
 
     const next = Math.min(value, targetSessions);
@@ -796,7 +816,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
     if (next >= targetSessions && current < targetSessions) {
       ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
-    } else ui.notifications.info(`${actor.name}'s sessions were set to ${next}.`);
+    } else ui.notifications.info(`${actor.name}'s hours were set to ${next}.`);
 
     await renderFeatTrainingTab(sheet, actor, tab);
   });
@@ -820,7 +840,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
       [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     });
 
-    ui.notifications.info(`${actor.name}'s target was set to ${amount} sessions${choice === "auto" ? " (automatic)" : ""}.`);
+    ui.notifications.info(`${actor.name}'s target was set to ${amount} hours${choice === "auto" ? " (automatic)" : ""}.`);
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 
