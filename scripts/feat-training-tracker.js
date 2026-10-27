@@ -106,7 +106,19 @@ function isCheckpointDue(actor) {
 }
 
 Hooks.on("renderCharacterActorSheet", async (sheet, html) => {
-  if (isPlayerViewLimited() && !isCheckpointDue(sheet.actor)) return;
+  if (isPlayerViewLimited() && !isCheckpointDue(sheet.actor)) {
+    // Zar sonrası sekme gereksiz kalır: önceki render'dan kalan düğme ve içerik temizlenir,
+    // eğitim sekmesi açıksa varsayılan sekmeye dönülür.
+    const root = html instanceof HTMLElement ? html : html?.[0] ?? sheet.element;
+    const wasActive = root?.querySelector(".feat-training-tab.active, .feat-training-tab-button.active");
+    root?.querySelectorAll(".feat-training-tab, .feat-training-tab-button").forEach(el => el.remove());
+    rememberTrainingTab(sheet.actor, false);
+    if (wasActive || sheet.tabGroups?.primary === TAB_ID) {
+      const fallback = ["attributes", "details", "inventory"].find(id => root?.querySelector(`[data-tab="${id}"]`));
+      if (fallback) sheet.changeTab(fallback, "primary", { updatePosition: false });
+    }
+    return;
+  }
   await injectTrainingTab(sheet, html);
 });
 
