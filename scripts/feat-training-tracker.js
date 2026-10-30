@@ -650,8 +650,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
       <div class="ft-banner ft-banner-complete">
         <i class="fas fa-award"></i>
         <div class="ft-banner-text"><strong>Training complete</strong>
-          <span>${featLinked ? (featGranted ? "Feat granted." : (isGM ? "Grant the feat to finish." : "Waiting for the GM to grant the feat.")) : "No feat was linked."}</span></div>
-        ${isGM && featLinked && !featGranted ? `<button type="button" class="feat-training-grant"><i class="fas fa-award"></i> Grant Feat</button>` : ""}
+          <span>${featLinked ? (featGranted ? "Feat granted." : (isGM ? "Grant it from the dashboard." : "Waiting for the GM to grant the feat.")) : "No feat was linked."}</span></div>
       </div>`;
   } else if (checkpointReady) {
     const final = sessions >= targetSessions;
@@ -689,7 +688,6 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
         ${featCategory ? `<span class="ft-badge">${FEAT_CATEGORY_LABELS[featCategory] ?? featCategory}</span>` : ""}
       </header>
 
-      ${isGM && !featLinked ? `<div class="ft-dropzone"><i class="fas fa-hand-pointer"></i> Drag a feat here to start training</div>` : ""}
 
       <section class="ft-progress">
         <div class="ft-bar">
@@ -713,10 +711,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
 
       ${isGM ? `
         <footer class="ft-actions">
-          <button type="button" class="feat-training-add-custom" data-tooltip="Add hours"><i class="fas fa-plus"></i> Add</button>
-          <button type="button" class="feat-training-set-sessions" data-tooltip="Set the hours directly"><i class="fas fa-pen-to-square"></i> Set</button>
-          <button type="button" class="feat-training-target" data-tooltip="Set the goal"><i class="fas fa-bullseye"></i> Goal</button>
-          <button type="button" class="feat-training-reset ft-danger" data-tooltip="Reset training"><i class="fas fa-rotate-left"></i> Reset</button>
+          <button type="button" class="feat-training-open-dashboard" data-tooltip="Manage all trainings"><i class="fas fa-table-list"></i> Open dashboard</button>
         </footer>` : ""}
     </div>
   `;
@@ -756,101 +751,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     await renderFeatTrainingTab(sheet, actor, tab);
   }
 
-  if (!game.user.isGM) return;
-
-
-  // Feat sürükle-bırak: GM bir feat'i sekmeye bırakarak eğitim hedefi yapar.
-  if (!tab.dataset.featTrainingDropBound) {
-    tab.dataset.featTrainingDropBound = "true";
-    tab.addEventListener("dragover", event => event.preventDefault());
-    tab.addEventListener("drop", async event => {
-      if (!game.user.isGM) return;
-      const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
-      if (data?.type !== "Item") return;
-      event.preventDefault();
-      event.stopPropagation();
-      const item = await fromUuid(data.uuid);
-      if (await linkFeat(actor, item)) await renderFeatTrainingTab(sheet, actor, tab);
-    });
-  }
-
-  tab.querySelector(".feat-training-grant")?.addEventListener("click", async () => {
-    await grantFeat(actor);
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
-
-  tab.querySelector(".feat-training-add-custom")?.addEventListener("click", async () => {
-    const amount = await askSessionAmount("How many hours were trained?", 4);
-    if (amount === null) return;
-
-    await addHours(actor, amount);
-
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
-
-  // Oturum sayısını doğrudan yazar (GM kararı): değerin altındaki checkpoint'ler geçilmiş sayılır,
-  // değer tam bir checkpoint'teyse onun zarı yine istenir.
-  tab.querySelector(".feat-training-set-sessions")?.addEventListener("click", async () => {
-    const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-    const value = await askSessionAmount("Set hours", current, { min: 0 });
-    if (value === null) return;
-
-    const next = Math.min(value, targetSessions);
-    const cleared = Math.max(
-      getClearedCheckpoint(actor, current, targetSessions, checkpointCount),
-      getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0
-    );
-    await actor.update({
-      [`flags.${MODULE_ID}.sessions`]: next,
-      [`flags.${MODULE_ID}.clearedCheckpoint`]: cleared,
-      ...(getRecoveryUntil(actor, next) ? {} : { [`flags.${MODULE_ID}.-=recoveryUntil`]: null })
-    });
-
-    if (next >= targetSessions && current < targetSessions) {
-      ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
-    } else ui.notifications.info(`${actor.name}'s hours were set to ${next}.`);
-
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
-
-
-  tab.querySelector(".feat-training-target")?.addEventListener("click", async () => {
-    const autoGoal = getAutoTarget(actor);
-    const choice = await askGoal(targetSessions, autoGoal);
-    if (choice === null) return;
-    const amount = choice === "auto" ? autoGoal : choice;
-
-    const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-
-    // Checkpoint konumları hedefe bağlı; geçilmiş checkpoint yeniden türetilir.
-    await actor.update({
-      ...(choice === "auto"
-        ? { [`flags.${MODULE_ID}.-=targetSessions`]: null }
-        : { [`flags.${MODULE_ID}.targetSessions`]: amount }),
-      [`flags.${MODULE_ID}.sessions`]: Math.min(current, amount),
-      [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
-      [`flags.${MODULE_ID}.-=recoveryUntil`]: null
-    });
-
-    ui.notifications.info(`${actor.name}'s target was set to ${amount} hours${choice === "auto" ? " (automatic)" : ""}.`);
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
-
-
-
-  tab.querySelector(".feat-training-reset")?.addEventListener("click", async () => {
-    const confirmReset = await foundry.applications.api.DialogV2.confirm({
-      window: { title: "Reset Training" },
-      content: `<p>Reset training progress for <b>${escapeHtml(actor.name)}</b>?</p>`,
-      no: { default: true },
-      rejectClose: false
-    });
-
-    if (!confirmReset) return;
-
-    await setSessions(actor, 0, targetSessions, checkpointCount, { resetCleared: true });
-    await renderFeatTrainingTab(sheet, actor, tab);
-  });
+  tab.querySelector(".feat-training-open-dashboard")?.addEventListener("click", () => openDashboard());
 }
 
 // Saat ekler: geçilmemiş checkpoint'te durur, telafi bölgesinde katlanır. Sekme ve dashboard kullanır.
@@ -880,12 +781,71 @@ async function addHours(actor, amount) {
   }
 }
 
+// Saat sayısını doğrudan yazar (GM kararı): değerin altındaki checkpoint'ler geçilmiş sayılır,
+// değer tam bir checkpoint'teyse onun zarı yine istenir.
+async function setHoursDialog(actor) {
+  const targetSessions = getTargetSessions(actor);
+  const checkpointCount = normalizeCheckpointCount(actor.getFlag(MODULE_ID, "checkpointCount") ?? getDefaultCheckpointCount());
+  const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+  const value = await askSessionAmount("Set hours", current, { min: 0 });
+  if (value === null) return;
+
+  const next = Math.min(value, targetSessions);
+  const cleared = Math.max(
+    getClearedCheckpoint(actor, current, targetSessions, checkpointCount),
+    getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0
+  );
+  await actor.update({
+    [`flags.${MODULE_ID}.sessions`]: next,
+    [`flags.${MODULE_ID}.clearedCheckpoint`]: cleared,
+    ...(getRecoveryUntil(actor, next) ? {} : { [`flags.${MODULE_ID}.-=recoveryUntil`]: null })
+  });
+
+  if (next >= targetSessions && current < targetSessions) {
+    ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
+  } else ui.notifications.info(`${actor.name}'s hours were set to ${next}.`);
+}
+
+async function goalDialog(actor) {
+  const autoGoal = getAutoTarget(actor);
+  const choice = await askGoal(getTargetSessions(actor), autoGoal);
+  if (choice === null) return;
+  const amount = choice === "auto" ? autoGoal : choice;
+  const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+
+  // Checkpoint konumları hedefe bağlı; geçilmiş checkpoint yeniden türetilir.
+  await actor.update({
+    ...(choice === "auto"
+      ? { [`flags.${MODULE_ID}.-=targetSessions`]: null }
+      : { [`flags.${MODULE_ID}.targetSessions`]: amount }),
+    [`flags.${MODULE_ID}.sessions`]: Math.min(current, amount),
+    [`flags.${MODULE_ID}.-=clearedCheckpoint`]: null,
+    [`flags.${MODULE_ID}.-=recoveryUntil`]: null
+  });
+  ui.notifications.info(`${actor.name}'s target was set to ${amount} hours${choice === "auto" ? " (automatic)" : ""}.`);
+}
+
+async function resetDialog(actor) {
+  const confirmReset = await foundry.applications.api.DialogV2.confirm({
+    window: { title: "Reset Training" },
+    content: `<p>Reset training progress for <b>${escapeHtml(actor.name)}</b>?</p>`,
+    no: { default: true },
+    rejectClose: false
+  });
+  if (!confirmReset) return;
+  const targetSessions = getTargetSessions(actor);
+  const checkpointCount = normalizeCheckpointCount(actor.getFlag(MODULE_ID, "checkpointCount") ?? getDefaultCheckpointCount());
+  await setSessions(actor, 0, targetSessions, checkpointCount, { resetCleared: true });
+}
+
 // ---------------- GM dashboard ----------------
 let dashboard = null;
 
+// Oyuncu karakterleri (eğitimi olmasa da) ve eğitimi süren diğer karakterler.
 function trainingRows() {
   return game.actors
-    .filter(a => a.type === "character" && (a.getFlag(MODULE_ID, "featUuid") || (a.getFlag(MODULE_ID, "sessions") ?? 0) > 0))
+    .filter(a => a.type === "character"
+      && (a.hasPlayerOwner || a.getFlag(MODULE_ID, "featUuid") || (a.getFlag(MODULE_ID, "sessions") ?? 0) > 0))
     .map(actor => {
       const sessions = actor.getFlag(MODULE_ID, "sessions") ?? 0;
       const target = getTargetSessions(actor);
@@ -894,56 +854,95 @@ function trainingRows() {
       const linked = Boolean(actor.getFlag(MODULE_ID, "featUuid"));
       return {
         actor, sessions, target, count, cleared, linked,
-        completed: isTrainingComplete(actor, sessions, target, count),
-        ready: isAtCheckpoint(sessions, target, count, cleared),
-        recovery: getRecoveryUntil(actor, sessions),
+        completed: linked && isTrainingComplete(actor, sessions, target, count),
+        ready: linked && isAtCheckpoint(sessions, target, count, cleared),
+        recovery: linked ? getRecoveryUntil(actor, sessions) : null,
         granted: linked && hasLinkedFeat(actor),
         percent: Math.min(100, Math.round((sessions / target) * 100))
       };
     })
-    .sort((a, b) => (b.completed - a.completed) || (b.ready - a.ready) || (b.percent - a.percent));
+    .sort((a, b) => (b.linked - a.linked) || (b.completed - a.completed) || (b.ready - a.ready)
+      || (b.percent - a.percent) || a.actor.name.localeCompare(b.actor.name));
 }
 
 function statusChip(r) {
+  if (!r.linked) return '<span class="ftd-chip ftd-muted">No feat</span>';
   if (r.completed) return r.granted ? '<span class="ftd-chip ftd-ok">Feat granted</span>' : '<span class="ftd-chip ftd-done">Complete</span>';
   if (r.ready) return '<span class="ftd-chip ftd-check">Checkpoint</span>';
   if (r.recovery) return '<span class="ftd-chip ftd-recover">Recovery x' + getRecoveryMultiplier() + "</span>";
   return '<span class="ftd-chip">Training</span>';
 }
 
+function actionButton(act, icon, tip, { disabled = false, danger = false } = {}) {
+  return `<button type="button" data-act="${act}" data-tooltip="${tip}" class="${danger ? "ft-danger" : ""}" ${disabled ? "disabled" : ""}><i class="fas fa-${icon}"></i></button>`;
+}
+
 function dashboardHtml() {
   const rows = trainingRows();
-  if (!rows.length) return '<p class="ftd-empty">No character is training yet. Drag a feat onto a character\'s training tab to start.</p>';
+  if (!rows.length) return '<p class="ftd-empty">No player characters found.</p>';
+  const count = fn => rows.filter(fn).length;
+  const summary = `<div class="ftd-summary">
+    <span><strong>${count(r => r.linked && !r.completed)}</strong> training</span>
+    <span><strong>${count(r => r.ready)}</strong> at checkpoint</span>
+    <span><strong>${count(r => r.completed && !r.granted)}</strong> ready to grant</span>
+    <span><strong>${count(r => !r.linked)}</strong> without a feat</span>
+  </div>`;
   const body = rows.map(r => {
     const name = r.actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
     const category = r.actor.getFlag(MODULE_ID, "featCategory");
-    const grant = r.completed && r.linked && !r.granted
-      ? '<button type="button" data-act="grant" data-tooltip="Grant Feat"><i class="fas fa-award"></i></button>' : "";
-    return `<tr data-actor="${r.actor.id}">
-      <td class="ftd-name"><a data-act="sheet">${escapeHtml(r.actor.name)}</a></td>
-      <td>${r.linked ? escapeHtml(name) : "<em>no feat</em>"}${category ? " <small>" + (FEAT_CATEGORY_LABELS[category] ?? category) + "</small>" : ""}</td>
-      <td class="ftd-progress">
+    const noFeat = !r.linked;
+    const grant = r.completed && !r.granted ? actionButton("grant", "award", "Grant Feat") : "";
+    const rowClass = r.ready ? "ftd-row-check" : r.completed && !r.granted ? "ftd-row-done" : "";
+    return `<tr data-actor="${r.actor.id}" class="${rowClass}">
+      <td class="ftd-name"><img src="${r.actor.img}" alt=""><a data-act="sheet">${escapeHtml(r.actor.name)}</a></td>
+      <td>${noFeat ? '<em class="ftd-drop"><i class="fas fa-hand-pointer"></i> Drop a feat here</em>'
+        : escapeHtml(name) + (category ? " <small>" + (FEAT_CATEGORY_LABELS[category] ?? category) + "</small>" : "")}</td>
+      <td class="ftd-progress">${noFeat ? "—" : `
         <div class="ft-bar"><div class="ft-bar-fill" style="width: ${r.percent}%"></div>${renderCheckpointMarkers(r.sessions, r.cleared, r.target, r.count)}</div>
-        <small>${r.sessions} / ${r.target} h · ${r.percent}%</small>
+        <small>${r.sessions} / ${r.target} h · ${r.percent}%</small>`}
       </td>
       <td>${statusChip(r)}</td>
       <td class="ftd-actions">
-        <button type="button" data-act="add" data-tooltip="Add hours"><i class="fas fa-plus"></i></button>${grant}
+        ${actionButton("add", "plus", "Add hours", { disabled: noFeat })}
+        ${actionButton("set", "pen-to-square", "Set the hours directly", { disabled: noFeat })}
+        ${actionButton("goal", "bullseye", "Set the goal", { disabled: noFeat })}
+        ${actionButton("reset", "rotate-left", "Reset training", { disabled: noFeat, danger: true })}
+        ${grant}
       </td>
     </tr>`;
   }).join("");
-  return `<table class="ftd-table"><thead><tr><th>Character</th><th>Feat</th><th>Progress</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+  return `${summary}<table class="ftd-table"><thead><tr><th>Character</th><th>Feat</th><th>Progress</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
 }
+
+const DASHBOARD_ACTIONS = {
+  add: async actor => {
+    const amount = await askSessionAmount("How many hours were trained?", 4);
+    if (amount !== null) await addHours(actor, amount);
+  },
+  set: setHoursDialog,
+  goal: goalDialog,
+  reset: resetDialog,
+  grant: grantFeat
+};
 
 function wireDashboard(root) {
   root.querySelectorAll("tr[data-actor]").forEach(row => {
     const actor = game.actors.get(row.dataset.actor);
     row.querySelector('[data-act="sheet"]')?.addEventListener("click", () => actor.sheet.render(true));
-    row.querySelector('[data-act="add"]')?.addEventListener("click", async () => {
-      const amount = await askSessionAmount("How many hours were trained?", 4);
-      if (amount !== null) await addHours(actor, amount);
+    for (const [act, handler] of Object.entries(DASHBOARD_ACTIONS)) {
+      row.querySelector(`button[data-act="${act}"]`)?.addEventListener("click", () => handler(actor));
+    }
+    // Feat sürükle-bırak: bir feat'i satırın üstüne bırakmak eğitimi başlatır.
+    row.addEventListener("dragover", event => { event.preventDefault(); row.classList.add("ftd-over"); });
+    row.addEventListener("dragleave", () => row.classList.remove("ftd-over"));
+    row.addEventListener("drop", async event => {
+      row.classList.remove("ftd-over");
+      const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
+      if (data?.type !== "Item") return;
+      event.preventDefault();
+      event.stopPropagation();
+      await linkFeat(actor, await fromUuid(data.uuid));
     });
-    row.querySelector('[data-act="grant"]')?.addEventListener("click", () => grantFeat(actor));
   });
 }
 
@@ -960,7 +959,7 @@ async function openDashboard() {
   dashboard = new foundry.applications.api.DialogV2({
     classes: ["ftd-dialog"],
     window: { title: "Feat Training — Dashboard", icon: "fas fa-graduation-cap", resizable: true },
-    position: { width: 820 },
+    position: { width: 900 },
     content: `<div class="ftd">${dashboardHtml()}</div>`,
     buttons: [{ action: "close", label: "Close", default: true }]
   });
@@ -973,6 +972,7 @@ Hooks.on("updateActor", (actor, changes) => {
   if (dashboard?.rendered && foundry.utils.hasProperty(changes, `flags.${MODULE_ID}`)) refreshDashboard();
 });
 Hooks.on("createItem", () => { if (dashboard?.rendered) refreshDashboard(); });
+Hooks.on("deleteItem", () => { if (dashboard?.rendered) refreshDashboard(); });
 
 Hooks.on("getSceneControlButtons", controls => {
   const tokens = controls.tokens;

@@ -28,7 +28,12 @@ All settings are world settings, changed by the GM. Defaults are the standard ru
 
 ## GM dashboard
 
-GM'ler için tek ekranda tüm eğitimleri gösteren bir pano: sahne kontrollerinde Token araçları altındaki mezuniyet şapkası düğmesinden (ya da `game.modules.get('feat-training').api.openDashboard()`) açılır. Her satırda karakter, feat, ilerleme çubuğu (checkpoint işaretleriyle), saat, durum (Training, Checkpoint, Recovery, Complete, Feat granted), **Add** (saat ekle) ve eğitim tamamlandıysa **Grant Feat** düğmesi bulunur. Karakter adına tıklayınca sayfası açılır. Pano canlıdır: ilerleme değişince kendiliğinden yenilenir.
+GM yönetiminin tamamı tek ekranda: sahne kontrollerinde Token araçları altındaki mezuniyet şapkası düğmesinden (ya da `game.modules.get('feat-training').api.openDashboard()`) açılır. Karakter sayfasındaki GM düğmeleri buraya taşındı; sayfada GM için yalnızca **Open dashboard** düğmesi kalır.
+
+- Her oyuncu karakteri bir satırdır (eğitimi olmayanlar da). Satırda feat, ilerleme çubuğu (checkpoint işaretleriyle), saat, durum (Training, Checkpoint, Recovery, Complete, Feat granted, No feat) ve düğmeler bulunur: **Add**, **Set**, **Goal**, **Reset** ve eğitim tamamlandıysa **Grant Feat**.
+- Bir feat'i satırın üstüne sürükleyip bırakarak eğitimi başlatırsın.
+- Üstte özet satırı: eğitimde, checkpoint'te, verilmeye hazır ve feat'siz karakter sayıları. Checkpoint bekleyen ve verilmeye hazır satırlar renkle öne çıkar.
+- Karakter adına tıklayınca sayfası açılır. Pano canlıdır: ilerleme değişince kendiliğinden yenilenir.
 
 ## Usage
 
