@@ -17,23 +17,12 @@ The module adds a graduation-cap tab to character sheets. The GM links a feat, a
 
 ## Settings
 
-All settings are world settings, changed by the GM. Defaults are the standard rules above.
+Tüm kurallar dashboard'ın **Settings** sekmesinde yönetilir (Foundry'nin modül ayarları penceresinde görünmezler; orada yalnızca dashboard'u açan bir düğme vardır). Değişiklikler yazıldığı anda kaydedilir ve açık karakter sayfaları yenilenir. **Reset to defaults** her kuralı varsayılana döndürür. Hepsi dünya ayarıdır, yalnızca GM değiştirir.
 
-- **Show training tab to players** (on): when off, players don't see the tab. When one of their characters reaches a checkpoint, they get a minimal tab with just the Roll button (no progress shown); it disappears after the roll.
-- **Checkpoint DC**, **Checkpoints per training**.
-- **Goal hours** for Origin, Fighting Style and General feats.
-- **Double progress after a failed checkpoint** (on) and **Recovery speed** (the multiplier, default 2).
-- **Natural 1 setback** (checkpoints dropped on a natural 1, default 2; 1 = same as a normal failure).
-- **Allow Epic Boon training** (off): Epic Boons use the General goal.
-
-## GM dashboard
-
-GM yönetiminin tamamı tek ekranda: sahne kontrollerinde Token araçları altındaki mezuniyet şapkası düğmesinden (ya da `game.modules.get('feat-training').api.openDashboard()`) açılır. Karakter sayfasındaki GM düğmeleri buraya taşındı; sayfada GM için yalnızca **Open dashboard** düğmesi kalır.
-
-- Her oyuncu karakteri bir satırdır (eğitimi olmayanlar da). Satırda feat, ilerleme çubuğu (checkpoint işaretleriyle), saat, durum (Training, Checkpoint, Recovery, Complete, Feat granted, No feat) ve düğmeler bulunur: **Add**, **Set**, **Goal**, **Reset** ve eğitim tamamlandıysa **Grant Feat**.
-- Bir feat'i satırın üstüne sürükleyip bırakarak eğitimi başlatırsın.
-- Üstte özet satırı: eğitimde, checkpoint'te, verilmeye hazır ve feat'siz karakter sayıları. Checkpoint bekleyen ve verilmeye hazır satırlar renkle öne çıkar.
-- Karakter adına tıklayınca sayfası açılır. Pano canlıdır: ilerleme değişince kendiliğinden yenilenir.
+- **Visibility:** *Show training tab to players* (varsayılan açık). Kapalıyken oyuncular sekmeyi görmez; karakter bir checkpoint'e geldiğinde yalnızca Roll düğmeli sade bir sekme çıkar ve zardan sonra kaybolur.
+- **Checkpoints:** DC (15) ve yeni eğitimler için checkpoint sayısı (10).
+- **Failure and recovery:** başarısız checkpoint sonrası çift ilerleme açık/kapalı, telafi çarpanı (2) ve doğal 1'de kaç checkpoint geri düşüleceği (2).
+- **Goals (hours):** Origin 960, Fighting Style 1280, General 1920 saat; *Allow Epic Boon training* (kapalı, açılırsa General hedefini kullanır).
 
 ## Usage
 

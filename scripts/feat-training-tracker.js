@@ -39,21 +39,29 @@ const ABILITIES = {
 };
 
 Hooks.once("init", () => {
-  game.settings.register(MODULE_ID, "checkpointDC", { name: "Checkpoint DC", hint: "Difficulty of the checkpoint ability check.", scope: "world", config: true, type: Number, default: 15 });
-  game.settings.register(MODULE_ID, "goalOriginHours", { name: "Goal: Origin feats (hours)", hint: "Automatic goal for Origin feats.", scope: "world", config: true, type: Number, default: 960 });
-  game.settings.register(MODULE_ID, "goalFightingStyleHours", { name: "Goal: Fighting Style feats (hours)", hint: "Automatic goal for Fighting Style feats.", scope: "world", config: true, type: Number, default: 1280 });
-  game.settings.register(MODULE_ID, "goalGeneralHours", { name: "Goal: General feats (hours)", hint: "Automatic goal for General feats.", scope: "world", config: true, type: Number, default: 1920 });
-  game.settings.register(MODULE_ID, "defaultCheckpointCount", { name: "Checkpoints per training", hint: "Default number of checkpoints for new trainings.", scope: "world", config: true, type: Number, default: 10 });
-  game.settings.register(MODULE_ID, "recoveryEnabled", { name: "Double progress after a failed checkpoint", hint: "When unchecked, a failed checkpoint only sets the training back; there is no faster catch-up.", scope: "world", config: true, type: Boolean, default: true });
-  game.settings.register(MODULE_ID, "recoveryMultiplier", { name: "Recovery speed", hint: "Hours count this many times after a failed checkpoint (1 disables the bonus).", scope: "world", config: true, type: Number, default: 2 });
-  game.settings.register(MODULE_ID, "naturalOneSteps", { name: "Natural 1 setback (checkpoints)", hint: "How many checkpoints a natural 1 sets the training back (1 = same as a normal failure).", scope: "world", config: true, type: Number, default: 2 });
+  game.settings.registerMenu(MODULE_ID, "dashboard", {
+    name: "Feat Training Dashboard",
+    label: "Open dashboard",
+    hint: "Trainings and every rule are managed in the dashboard (also in the Token tools on the scene controls).",
+    icon: "fas fa-graduation-cap",
+    type: FeatTrainingDashboardMenu,
+    restricted: true
+  });
+  game.settings.register(MODULE_ID, "checkpointDC", { name: "Checkpoint DC", hint: "Difficulty of the checkpoint ability check.", scope: "world", config: false, type: Number, default: 15 });
+  game.settings.register(MODULE_ID, "goalOriginHours", { name: "Goal: Origin feats (hours)", hint: "Automatic goal for Origin feats.", scope: "world", config: false, type: Number, default: 960 });
+  game.settings.register(MODULE_ID, "goalFightingStyleHours", { name: "Goal: Fighting Style feats (hours)", hint: "Automatic goal for Fighting Style feats.", scope: "world", config: false, type: Number, default: 1280 });
+  game.settings.register(MODULE_ID, "goalGeneralHours", { name: "Goal: General feats (hours)", hint: "Automatic goal for General feats.", scope: "world", config: false, type: Number, default: 1920 });
+  game.settings.register(MODULE_ID, "defaultCheckpointCount", { name: "Checkpoints per training", hint: "Default number of checkpoints for new trainings.", scope: "world", config: false, type: Number, default: 10 });
+  game.settings.register(MODULE_ID, "recoveryEnabled", { name: "Double progress after a failed checkpoint", hint: "When unchecked, a failed checkpoint only sets the training back; there is no faster catch-up.", scope: "world", config: false, type: Boolean, default: true });
+  game.settings.register(MODULE_ID, "recoveryMultiplier", { name: "Recovery speed", hint: "Hours count this many times after a failed checkpoint (1 disables the bonus).", scope: "world", config: false, type: Number, default: 2 });
+  game.settings.register(MODULE_ID, "naturalOneSteps", { name: "Natural 1 setback (checkpoints)", hint: "How many checkpoints a natural 1 sets the training back (1 = same as a normal failure).", scope: "world", config: false, type: Number, default: 2 });
   game.settings.register(MODULE_ID, "hoursMigrated", { scope: "world", config: false, type: Boolean, default: false });
-  game.settings.register(MODULE_ID, "allowEpicBoon", { name: "Allow Epic Boon training", hint: "Lets the GM link Epic Boons. They use the General goal.", scope: "world", config: true, type: Boolean, default: false });
+  game.settings.register(MODULE_ID, "allowEpicBoon", { name: "Allow Epic Boon training", hint: "Lets the GM link Epic Boons. They use the General goal.", scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "showToPlayers", {
     name: "Show training tab to players",
     hint: "When unchecked, players don't see the training tab on their character sheets. The GM always sees it.",
     scope: "world",
-    config: true,
+    config: false,
     type: Boolean,
     default: true,
     onChange: () => {
@@ -873,8 +881,9 @@ function statusChip(r) {
   return '<span class="ftd-chip">Training</span>';
 }
 
-function actionButton(act, icon, tip, { disabled = false, danger = false } = {}) {
-  return `<button type="button" data-act="${act}" data-tooltip="${tip}" class="${danger ? "ft-danger" : ""}" ${disabled ? "disabled" : ""}><i class="fas fa-${icon}"></i></button>`;
+function actionButton(act, icon, label, tip, { disabled = false, danger = false, primary = false } = {}) {
+  const cls = ["ftd-btn", danger ? "ftd-btn-danger" : "", primary ? "ftd-btn-primary" : ""].join(" ").trim();
+  return `<button type="button" data-act="${act}" data-tooltip="${tip}" class="${cls}" ${disabled ? "disabled" : ""}><i class="fas fa-${icon}"></i> ${label}</button>`;
 }
 
 function dashboardHtml() {
@@ -891,7 +900,7 @@ function dashboardHtml() {
     const name = r.actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
     const category = r.actor.getFlag(MODULE_ID, "featCategory");
     const noFeat = !r.linked;
-    const grant = r.completed && !r.granted ? actionButton("grant", "award", "Grant Feat") : "";
+    const grant = r.completed && !r.granted ? actionButton("grant", "award", "Grant feat", "Give the trained feat to the character", { primary: true }) : "";
     const rowClass = r.ready ? "ftd-row-check" : r.completed && !r.granted ? "ftd-row-done" : "";
     return `<tr data-actor="${r.actor.id}" class="${rowClass}">
       <td class="ftd-name"><img src="${r.actor.img}" alt=""><a data-act="sheet">${escapeHtml(r.actor.name)}</a></td>
@@ -902,16 +911,16 @@ function dashboardHtml() {
         <small>${r.sessions} / ${r.target} h · ${r.percent}%</small>`}
       </td>
       <td>${statusChip(r)}</td>
-      <td class="ftd-actions">
-        ${actionButton("add", "plus", "Add hours", { disabled: noFeat })}
-        ${actionButton("set", "pen-to-square", "Set the hours directly", { disabled: noFeat })}
-        ${actionButton("goal", "bullseye", "Set the goal", { disabled: noFeat })}
-        ${actionButton("reset", "rotate-left", "Reset training", { disabled: noFeat, danger: true })}
+      <td class="ftd-actions"><div class="ftd-btns">
         ${grant}
-      </td>
+        ${actionButton("add", "plus", "Add hours", "Add the hours the character trained", { disabled: noFeat })}
+        ${actionButton("set", "pen-to-square", "Set hours", "Write the total hours directly", { disabled: noFeat })}
+        ${actionButton("goal", "bullseye", "Goal", "Change the target hours", { disabled: noFeat })}
+        ${actionButton("reset", "rotate-left", "Reset", "Clear this training and start over", { disabled: noFeat, danger: true })}
+      </div></td>
     </tr>`;
   }).join("");
-  return `${summary}<table class="ftd-table"><thead><tr><th>Character</th><th>Feat</th><th>Progress</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+  return `${summary}<table class="ftd-table"><thead><tr><th>Character</th><th>Feat</th><th>Progress</th><th>Status</th><th>Actions</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
 const DASHBOARD_ACTIONS = {
@@ -947,10 +956,115 @@ function wireDashboard(root) {
 }
 
 function refreshDashboard() {
-  const content = dashboard?.element?.querySelector(".ftd");
+  const content = dashboard?.element?.querySelector(".ftd-trainings");
   if (!content) return;
   content.innerHTML = dashboardHtml();
   wireDashboard(content);
+}
+
+// ---------------- Dashboard: ayarlar sekmesi ----------------
+// Modül ayarları Foundry'nin ayar penceresinde değil, dashboard'ın Settings sekmesinde yönetilir.
+// Ad, ipucu ve varsayılan değerler ayar kaydından okunur (init kancasında).
+const SETTING_GROUPS = [
+  { title: "Visibility", items: [{ key: "showToPlayers", type: "bool" }] },
+  { title: "Checkpoints", items: [{ key: "checkpointDC", type: "number", min: 1 }, { key: "defaultCheckpointCount", type: "number", min: 1 }] },
+  { title: "Failure and recovery", items: [
+    { key: "recoveryEnabled", type: "bool" },
+    { key: "recoveryMultiplier", type: "number", min: 1, step: 0.5 },
+    { key: "naturalOneSteps", type: "number", min: 1 }
+  ] },
+  { title: "Goals (hours)", items: [
+    { key: "goalOriginHours", type: "number", min: 1 },
+    { key: "goalFightingStyleHours", type: "number", min: 1 },
+    { key: "goalGeneralHours", type: "number", min: 1 },
+    { key: "allowEpicBoon", type: "bool" }
+  ] }
+];
+
+function settingDef(key) {
+  return game.settings.settings.get(`${MODULE_ID}.${key}`);
+}
+
+function settingsHtml() {
+  const groups = SETTING_GROUPS.map(group => {
+    const items = group.items.map(item => {
+      const def = settingDef(item.key);
+      const value = game.settings.get(MODULE_ID, item.key);
+      const text = `<span class="ftd-set-text"><strong>${escapeHtml(def.name)}</strong><small>${escapeHtml(def.hint ?? "")}</small></span>`;
+      const input = item.type === "bool"
+        ? `<input type="checkbox" name="${item.key}" ${value ? "checked" : ""}>`
+        : `<input type="number" name="${item.key}" value="${value}" min="${item.min ?? 0}" step="${item.step ?? 1}">`;
+      return `<label class="ftd-set ftd-set-${item.type}">${item.type === "bool" ? input + text : text + input}</label>`;
+    }).join("");
+    return `<section class="ftd-set-group"><h3>${group.title}</h3>${items}</section>`;
+  }).join("");
+  return `${groups}<footer class="ftd-set-footer"><span class="ftd-saved" hidden><i class="fas fa-check"></i> Saved</span><button type="button" data-act="defaults"><i class="fas fa-rotate-left"></i> Reset to defaults</button></footer>`;
+}
+
+function wireSettings(root) {
+  const flash = () => {
+    const mark = root.querySelector(".ftd-saved");
+    if (!mark) return;
+    mark.hidden = false;
+    clearTimeout(flash.timer);
+    flash.timer = setTimeout(() => { mark.hidden = true; }, 1500);
+  };
+  const apply = async (key, value) => {
+    await game.settings.set(MODULE_ID, key, value);
+    flash();
+    refreshDashboard();
+    // Açık karakter sayfaları yeni kurallara göre yenilenir (DC, hedefler vb.).
+    for (const app of foundry.applications.instances.values()) {
+      if (app.document?.documentName === "Actor") app.render();
+    }
+  };
+
+  root.addEventListener("change", async event => {
+    const input = event.target;
+    const item = SETTING_GROUPS.flatMap(g => g.items).find(i => i.key === input.name);
+    if (!item) return;
+    if (item.type === "bool") return apply(item.key, input.checked);
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || value < (item.min ?? 0)) {
+      input.value = game.settings.get(MODULE_ID, item.key);
+      return ui.notifications.warn(`${settingDef(item.key).name}: enter a number of at least ${item.min ?? 0}.`);
+    }
+    return apply(item.key, value);
+  });
+
+  root.querySelector('[data-act="defaults"]')?.addEventListener("click", async () => {
+    const ok = await foundry.applications.api.DialogV2.confirm({
+      window: { title: "Reset to defaults" },
+      content: "<p>Reset every Feat Training rule to its default value?</p>",
+      no: { default: true },
+      rejectClose: false
+    });
+    if (!ok) return;
+    for (const { key } of SETTING_GROUPS.flatMap(g => g.items)) await game.settings.set(MODULE_ID, key, settingDef(key).default);
+    root.innerHTML = settingsHtml();
+    wireSettings(root);
+    refreshDashboard();
+  });
+}
+
+let dashboardTab = "trainings";
+
+function dashboardShell() {
+  const tab = (id, icon, label) => `<a data-tab="${id}" class="${dashboardTab === id ? "active" : ""}"><i class="fas fa-${icon}"></i> ${label}</a>`;
+  return `<div class="ftd">
+    <nav class="ftd-tabs">${tab("trainings", "table-list", "Trainings")}${tab("settings", "sliders", "Settings")}</nav>
+    <div class="ftd-panel ftd-trainings ${dashboardTab === "trainings" ? "active" : ""}">${dashboardHtml()}</div>
+    <div class="ftd-panel ftd-settings ${dashboardTab === "settings" ? "active" : ""}">${settingsHtml()}</div>
+  </div>`;
+}
+
+function wireTabs(root) {
+  root.querySelectorAll(".ftd-tabs a").forEach(link => link.addEventListener("click", () => {
+    dashboardTab = link.dataset.tab;
+    root.querySelectorAll(".ftd-tabs a").forEach(a => a.classList.toggle("active", a === link));
+    root.querySelector(".ftd-trainings").classList.toggle("active", dashboardTab === "trainings");
+    root.querySelector(".ftd-settings").classList.toggle("active", dashboardTab === "settings");
+  }));
 }
 
 async function openDashboard() {
@@ -959,13 +1073,24 @@ async function openDashboard() {
   dashboard = new foundry.applications.api.DialogV2({
     classes: ["ftd-dialog"],
     window: { title: "Feat Training — Dashboard", icon: "fas fa-graduation-cap", resizable: true },
-    position: { width: 900 },
-    content: `<div class="ftd">${dashboardHtml()}</div>`,
+    position: { width: 1040 },
+    content: dashboardShell(),
     buttons: [{ action: "close", label: "Close", default: true }]
   });
   await dashboard.render({ force: true });
-  wireDashboard(dashboard.element.querySelector(".ftd"));
+  const root = dashboard.element.querySelector(".ftd");
+  wireDashboard(root.querySelector(".ftd-trainings"));
+  wireSettings(root.querySelector(".ftd-settings"));
+  wireTabs(root);
   return dashboard;
+}
+
+// Ayarlar Foundry'nin ayar penceresinde görünmez; oradan dashboard açılır.
+class FeatTrainingDashboardMenu extends foundry.applications.api.ApplicationV2 {
+  async render() {
+    openDashboard();
+    return this;
+  }
 }
 
 Hooks.on("updateActor", (actor, changes) => {
