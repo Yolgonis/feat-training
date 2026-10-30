@@ -1098,7 +1098,8 @@ async function openDashboard() {
   dashboard = new foundry.applications.api.DialogV2({
     classes: ["ftd-dialog"],
     window: { title: "Feat Training — Dashboard", icon: "fas fa-graduation-cap", resizable: true },
-    position: { width: 1040 },
+    // Sabit bir yükseklik: içerik taşınca ilgili sekme kendi içinde kaydırılır.
+    position: { width: 1040, height: Math.min(760, window.innerHeight - 80) },
     content: dashboardShell(),
     buttons: [{ action: "close", label: "Close", default: true }]
   });
