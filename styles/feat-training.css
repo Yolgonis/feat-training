@@ -310,3 +310,20 @@
   background: #f2eee3 !important;
   color: #1f1a12 !important;
 }
+
+/* ---------- GM dashboard ---------- */
+.ftd-dialog .ftd { max-height: 70vh; overflow-y: auto; }
+.ftd-table { width: 100%; border-collapse: collapse; }
+.ftd-table th { text-align: left; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; padding: 0.3rem 0.5rem; }
+.ftd-table td { padding: 0.45rem 0.5rem; vertical-align: middle; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.ftd-name a { cursor: pointer; font-weight: 600; }
+.ftd-progress { min-width: 200px; }
+.ftd-progress .ft-bar { margin-bottom: 0.2rem; }
+.ftd-chip { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.75rem; background: rgba(255, 255, 255, 0.08); }
+.ftd-check { background: rgba(214, 180, 95, 0.25); }
+.ftd-recover { background: rgba(124, 207, 139, 0.2); }
+.ftd-done { background: rgba(124, 207, 139, 0.35); }
+.ftd-ok { opacity: 0.7; }
+.ftd-actions { white-space: nowrap; text-align: right; }
+.ftd-actions button { width: 2rem; height: 2rem; line-height: 1; margin-left: 0.2rem; cursor: pointer; }
+.ftd-empty { opacity: 0.7; padding: 1rem; text-align: center; }

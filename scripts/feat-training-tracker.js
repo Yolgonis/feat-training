@@ -783,27 +783,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     const amount = await askSessionAmount("How many hours were trained?", 4);
     if (amount === null) return;
 
-    const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-    const cleared = getClearedCheckpoint(actor, current, targetSessions, checkpointCount);
-
-    if (isAtCheckpoint(current, targetSessions, checkpointCount, cleared)) {
-      ui.notifications.warn(`${actor.name} must pass the checkpoint check before more hours can be added.`);
-      return;
-    }
-
-    const limit = getNextBlockingCheckpoint(cleared, targetSessions, checkpointCount);
-    const gain = getProgressGain(current, amount, getRecoveryUntil(actor, current));
-    const next = Math.min(current + gain, limit);
-
-    await setSessions(actor, next, targetSessions, checkpointCount);
-
-    if (next >= targetSessions && current < targetSessions) {
-      ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
-    } else if (next < current + gain) {
-      ui.notifications.info(`${actor.name} reached a checkpoint at ${next} h; the remaining hours were not added.`);
-    } else if (gain > amount) {
-      ui.notifications.info(`${actor.name} is recovering: ${amount} hours counted as ${gain}.`);
-    }
+    await addHours(actor, amount);
 
     await renderFeatTrainingTab(sheet, actor, tab);
   });
@@ -872,6 +852,140 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
     await renderFeatTrainingTab(sheet, actor, tab);
   });
 }
+
+// Saat ekler: geçilmemiş checkpoint'te durur, telafi bölgesinde katlanır. Sekme ve dashboard kullanır.
+async function addHours(actor, amount) {
+  const targetSessions = getTargetSessions(actor);
+  const checkpointCount = normalizeCheckpointCount(actor.getFlag(MODULE_ID, "checkpointCount") ?? getDefaultCheckpointCount());
+  const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+  const cleared = getClearedCheckpoint(actor, current, targetSessions, checkpointCount);
+
+  if (isAtCheckpoint(current, targetSessions, checkpointCount, cleared)) {
+    ui.notifications.warn(`${actor.name} must pass the checkpoint check before more hours can be added.`);
+    return;
+  }
+
+  const limit = getNextBlockingCheckpoint(cleared, targetSessions, checkpointCount);
+  const gain = getProgressGain(current, amount, getRecoveryUntil(actor, current));
+  const next = Math.min(current + gain, limit);
+
+  await setSessions(actor, next, targetSessions, checkpointCount);
+
+  if (next >= targetSessions && current < targetSessions) {
+    ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
+  } else if (next < current + gain) {
+    ui.notifications.info(`${actor.name} reached a checkpoint at ${next} h; the remaining hours were not added.`);
+  } else if (gain > amount) {
+    ui.notifications.info(`${actor.name} is recovering: ${amount} hours counted as ${gain}.`);
+  }
+}
+
+// ---------------- GM dashboard ----------------
+let dashboard = null;
+
+function trainingRows() {
+  return game.actors
+    .filter(a => a.type === "character" && (a.getFlag(MODULE_ID, "featUuid") || (a.getFlag(MODULE_ID, "sessions") ?? 0) > 0))
+    .map(actor => {
+      const sessions = actor.getFlag(MODULE_ID, "sessions") ?? 0;
+      const target = getTargetSessions(actor);
+      const count = normalizeCheckpointCount(actor.getFlag(MODULE_ID, "checkpointCount") ?? getDefaultCheckpointCount());
+      const cleared = getClearedCheckpoint(actor, sessions, target, count);
+      const linked = Boolean(actor.getFlag(MODULE_ID, "featUuid"));
+      return {
+        actor, sessions, target, count, cleared, linked,
+        completed: isTrainingComplete(actor, sessions, target, count),
+        ready: isAtCheckpoint(sessions, target, count, cleared),
+        recovery: getRecoveryUntil(actor, sessions),
+        granted: linked && hasLinkedFeat(actor),
+        percent: Math.min(100, Math.round((sessions / target) * 100))
+      };
+    })
+    .sort((a, b) => (b.completed - a.completed) || (b.ready - a.ready) || (b.percent - a.percent));
+}
+
+function statusChip(r) {
+  if (r.completed) return r.granted ? '<span class="ftd-chip ftd-ok">Feat granted</span>' : '<span class="ftd-chip ftd-done">Complete</span>';
+  if (r.ready) return '<span class="ftd-chip ftd-check">Checkpoint</span>';
+  if (r.recovery) return '<span class="ftd-chip ftd-recover">Recovery x' + getRecoveryMultiplier() + "</span>";
+  return '<span class="ftd-chip">Training</span>';
+}
+
+function dashboardHtml() {
+  const rows = trainingRows();
+  if (!rows.length) return '<p class="ftd-empty">No character is training yet. Drag a feat onto a character\'s training tab to start.</p>';
+  const body = rows.map(r => {
+    const name = r.actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
+    const category = r.actor.getFlag(MODULE_ID, "featCategory");
+    const grant = r.completed && r.linked && !r.granted
+      ? '<button type="button" data-act="grant" data-tooltip="Grant Feat"><i class="fas fa-award"></i></button>' : "";
+    return `<tr data-actor="${r.actor.id}">
+      <td class="ftd-name"><a data-act="sheet">${escapeHtml(r.actor.name)}</a></td>
+      <td>${r.linked ? escapeHtml(name) : "<em>no feat</em>"}${category ? " <small>" + (FEAT_CATEGORY_LABELS[category] ?? category) + "</small>" : ""}</td>
+      <td class="ftd-progress">
+        <div class="ft-bar"><div class="ft-bar-fill" style="width: ${r.percent}%"></div>${renderCheckpointMarkers(r.sessions, r.cleared, r.target, r.count)}</div>
+        <small>${r.sessions} / ${r.target} h · ${r.percent}%</small>
+      </td>
+      <td>${statusChip(r)}</td>
+      <td class="ftd-actions">
+        <button type="button" data-act="add" data-tooltip="Add hours"><i class="fas fa-plus"></i></button>${grant}
+      </td>
+    </tr>`;
+  }).join("");
+  return `<table class="ftd-table"><thead><tr><th>Character</th><th>Feat</th><th>Progress</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function wireDashboard(root) {
+  root.querySelectorAll("tr[data-actor]").forEach(row => {
+    const actor = game.actors.get(row.dataset.actor);
+    row.querySelector('[data-act="sheet"]')?.addEventListener("click", () => actor.sheet.render(true));
+    row.querySelector('[data-act="add"]')?.addEventListener("click", async () => {
+      const amount = await askSessionAmount("How many hours were trained?", 4);
+      if (amount !== null) await addHours(actor, amount);
+    });
+    row.querySelector('[data-act="grant"]')?.addEventListener("click", () => grantFeat(actor));
+  });
+}
+
+function refreshDashboard() {
+  const content = dashboard?.element?.querySelector(".ftd");
+  if (!content) return;
+  content.innerHTML = dashboardHtml();
+  wireDashboard(content);
+}
+
+async function openDashboard() {
+  if (!game.user.isGM) return ui.notifications.warn("Feat Training: only the GM can open the dashboard.");
+  if (dashboard?.rendered) return dashboard.bringToFront();
+  dashboard = new foundry.applications.api.DialogV2({
+    classes: ["ftd-dialog"],
+    window: { title: "Feat Training — Dashboard", icon: "fas fa-graduation-cap", resizable: true },
+    position: { width: 820 },
+    content: `<div class="ftd">${dashboardHtml()}</div>`,
+    buttons: [{ action: "close", label: "Close", default: true }]
+  });
+  await dashboard.render({ force: true });
+  wireDashboard(dashboard.element.querySelector(".ftd"));
+  return dashboard;
+}
+
+Hooks.on("updateActor", (actor, changes) => {
+  if (dashboard?.rendered && foundry.utils.hasProperty(changes, `flags.${MODULE_ID}`)) refreshDashboard();
+});
+Hooks.on("createItem", () => { if (dashboard?.rendered) refreshDashboard(); });
+
+Hooks.on("getSceneControlButtons", controls => {
+  const tokens = controls.tokens;
+  if (!game.user.isGM || !tokens?.tools) return;
+  tokens.tools.featTrainingDashboard = {
+    name: "featTrainingDashboard", title: "Feat Training Dashboard", icon: "fas fa-graduation-cap",
+    order: Object.keys(tokens.tools).length, button: true, visible: true, onChange: () => openDashboard()
+  };
+});
+
+Hooks.once("ready", () => {
+  game.modules.get(MODULE_ID).api = { openDashboard };
+});
 
 function escapeHtml(value) {
   return String(value)

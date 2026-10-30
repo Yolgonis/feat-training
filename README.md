@@ -26,6 +26,10 @@ All settings are world settings, changed by the GM. Defaults are the standard ru
 - **Natural 1 setback** (checkpoints dropped on a natural 1, default 2; 1 = same as a normal failure).
 - **Allow Epic Boon training** (off): Epic Boons use the General goal.
 
+## GM dashboard
+
+GM'ler için tek ekranda tüm eğitimleri gösteren bir pano: sahne kontrollerinde Token araçları altındaki mezuniyet şapkası düğmesinden (ya da `game.modules.get('feat-training').api.openDashboard()`) açılır. Her satırda karakter, feat, ilerleme çubuğu (checkpoint işaretleriyle), saat, durum (Training, Checkpoint, Recovery, Complete, Feat granted), **Add** (saat ekle) ve eğitim tamamlandıysa **Grant Feat** düğmesi bulunur. Karakter adına tıklayınca sayfası açılır. Pano canlıdır: ilerleme değişince kendiliğinden yenilenir.
+
 ## Usage
 
 Open a character sheet and select the graduation-cap tab. The GM panel holds Add Hours, Set Hours (direct correction), Set Goal and Reset. Checkpoint checks, failures, recovery, the main ability and the checkpoint layout are handled automatically.
