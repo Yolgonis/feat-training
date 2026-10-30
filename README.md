@@ -15,6 +15,18 @@ The module adds a graduation-cap tab to character sheets. The GM links a feat, a
 - **Completion:** passing the final check posts a chat message. The GM then grants the linked feat with Grant Feat, through dnd5e's advancement flow (e.g. the feat's ability score increase). The training resets once the feat is on the character.
 - The tab stays open after sheet updates and re-renders.
 
+## GM dashboard
+
+GM yönetiminin tamamı tek ekranda: sahne kontrollerinde Token araçları altındaki mezuniyet şapkası düğmesinden (ya da `game.modules.get('feat-training').api.openDashboard()`, ya da Foundry modül ayarlarındaki **Open dashboard** düğmesinden) açılır. Karakter sayfasında GM için yalnızca **Open dashboard** düğmesi kalır.
+
+**Trainings** sekmesi:
+- Her oyuncu karakteri bir satırdır (eğitimi olmayanlar da). Satırda feat, ilerleme çubuğu (checkpoint işaretleriyle), saat ve durum (Training, Checkpoint, Recovery, Complete, Feat granted, No feat) bulunur.
+- Yazılı düğmeler: **Add hours** (eğitilen saati ekle), **Set hours** (toplamı doğrudan yaz), **Goal** (hedefi değiştir), **Reset** (eğitimi sıfırla) ve eğitim tamamlandıysa vurgulu **Grant feat**.
+- Bir feat'i satırın üstüne sürükleyip bırakarak eğitimi başlatırsın.
+- Üstte özet satırı: eğitimde, checkpoint'te, verilmeye hazır ve feat'siz karakter sayıları. Checkpoint bekleyen ve verilmeye hazır satırlar renkle öne çıkar.
+- Karakter adına tıklayınca sayfası açılır. Pano canlıdır: ilerleme değişince kendiliğinden yenilenir.
+
+**Settings** sekmesi: aşağıdaki bölüme bakın.
 ## Settings
 
 Tüm kurallar dashboard'ın **Settings** sekmesinde yönetilir (Foundry'nin modül ayarları penceresinde görünmezler; orada yalnızca dashboard'u açan bir düğme vardır). Değişiklikler yazıldığı anda kaydedilir ve açık karakter sayfaları yenilenir. **Reset to defaults** her kuralı varsayılana döndürür. Hepsi dünya ayarıdır, yalnızca GM değiştirir.
@@ -26,7 +38,7 @@ Tüm kurallar dashboard'ın **Settings** sekmesinde yönetilir (Foundry'nin mod�
 
 ## Usage
 
-Open a character sheet and select the graduation-cap tab. The GM panel holds Add Hours, Set Hours (direct correction), Set Goal and Reset. Checkpoint checks, failures, recovery, the main ability and the checkpoint layout are handled automatically.
+Open a character sheet and select the graduation-cap tab. The GM manages everything from the dashboard (Add hours, Set hours, Goal, Reset, Grant feat and every rule). Checkpoint checks, failures, recovery, the main ability and the checkpoint layout are handled automatically.
 
 Training saved in sessions by versions before 3.0.0 is converted once (1 session = 4 hours) when the GM first loads the world.
 
