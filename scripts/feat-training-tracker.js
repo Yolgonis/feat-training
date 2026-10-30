@@ -451,8 +451,33 @@ function hasLinkedFeat(actor) {
     && ((identifier && i.system?.identifier === identifier) || i.name === name));
 }
 
+// Feat verilirken advancement seçimini önce karakterin bağlı oyuncusu yapar (pencere onun ekranında
+// açılır); bağlı oyuncu yoksa, ya da GM Shift ile basarsa, seçimi GM yapar.
+const SOCKET_NAME = `module.${MODULE_ID}`;
+
+function onlineOwner(actor) {
+  return game.users.find(u => !u.isGM && u.active && actor.testUserPermission(u, "OWNER"));
+}
+
+async function grantFeat(actor, { here = false } = {}) {
+  const owner = here ? null : onlineOwner(actor);
+  if (!owner || hasLinkedFeat(actor)) return grantFeatHere(actor);
+  game.socket.emit(SOCKET_NAME, { type: "grantFeat", actorUuid: actor.uuid, userId: owner.id });
+  ui.notifications.info(`${owner.name} will choose the feat's options for ${actor.name}. Shift-click Grant feat to choose it yourself.`);
+  return true;
+}
+
+// Oyuncu tarafı: GM'in isteği gelince advancement penceresi bu istemcide açılır.
+async function onGrantRequest(payload, senderId) {
+  if (payload?.type !== "grantFeat" || payload.userId !== game.user.id) return;
+  if (!game.users.get(senderId)?.isGM) return;
+  const actor = await fromUuid(payload.actorUuid);
+  if (!actor?.isOwner) return;
+  await grantFeatHere(actor);
+}
+
 // Bağlı feat'i karaktere ekler; dnd5e advancement adımları (ör. +1 yetenek) varsa pencereyi açar.
-async function grantFeat(actor) {
+async function grantFeatHere(actor) {
   const feat = await fromUuid(actor.getFlag(MODULE_ID, "featUuid") ?? "");
   if (!feat) {
     ui.notifications.warn("The linked feat could not be found.");
@@ -900,7 +925,7 @@ function dashboardHtml() {
     const name = r.actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
     const category = r.actor.getFlag(MODULE_ID, "featCategory");
     const noFeat = !r.linked;
-    const grant = r.completed && !r.granted ? actionButton("grant", "award", "Grant feat", "Give the trained feat to the character", { primary: true }) : "";
+    const grant = r.completed && !r.granted ? actionButton("grant", "award", "Grant feat", "The player chooses the feat's options when online (Shift-click: you choose)", { primary: true }) : "";
     const rowClass = r.ready ? "ftd-row-check" : r.completed && !r.granted ? "ftd-row-done" : "";
     return `<tr data-actor="${r.actor.id}" class="${rowClass}">
       <td class="ftd-name"><img src="${r.actor.img}" alt=""><a data-act="sheet">${escapeHtml(r.actor.name)}</a></td>
@@ -931,7 +956,7 @@ const DASHBOARD_ACTIONS = {
   set: setHoursDialog,
   goal: goalDialog,
   reset: resetDialog,
-  grant: grantFeat
+  grant: (actor, event) => grantFeat(actor, { here: event?.shiftKey })
 };
 
 function wireDashboard(root) {
@@ -939,7 +964,7 @@ function wireDashboard(root) {
     const actor = game.actors.get(row.dataset.actor);
     row.querySelector('[data-act="sheet"]')?.addEventListener("click", () => actor.sheet.render(true));
     for (const [act, handler] of Object.entries(DASHBOARD_ACTIONS)) {
-      row.querySelector(`button[data-act="${act}"]`)?.addEventListener("click", () => handler(actor));
+      row.querySelector(`button[data-act="${act}"]`)?.addEventListener("click", event => handler(actor, event));
     }
     // Feat sürükle-bırak: bir feat'i satırın üstüne bırakmak eğitimi başlatır.
     row.addEventListener("dragover", event => { event.preventDefault(); row.classList.add("ftd-over"); });
@@ -1110,6 +1135,7 @@ Hooks.on("getSceneControlButtons", controls => {
 
 Hooks.once("ready", () => {
   game.modules.get(MODULE_ID).api = { openDashboard };
+  game.socket.on(SOCKET_NAME, onGrantRequest);
 });
 
 function escapeHtml(value) {

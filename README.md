@@ -24,6 +24,7 @@ GM yönetiminin tamamı tek ekranda: sahne kontrollerinde Token araçları altı
 - Yazılı düğmeler: **Add hours** (eğitilen saati ekle), **Set hours** (toplamı doğrudan yaz), **Goal** (hedefi değiştir), **Reset** (eğitimi sıfırla) ve eğitim tamamlandıysa vurgulu **Grant feat**.
 - Bir feat'i satırın üstüne sürükleyip bırakarak eğitimi başlatırsın.
 - Üstte özet satırı: eğitimde, checkpoint'te, verilmeye hazır ve feat'siz karakter sayıları. Checkpoint bekleyen ve verilmeye hazır satırlar renkle öne çıkar.
+- **Grant feat:** feat'in advancement seçimi (ör. +1 yetenek puanı) önce karakterin bağlı oyuncusuna gider; pencere oyuncunun ekranında açılır ve oyuncu seçip onaylayınca feat eklenir, eğitim sıfırlanır. Oyuncu bağlı değilse seçimi GM yapar. Oyuncu bağlıyken seçimi kendin yapmak istersen **Shift ile tıkla**.
 - Karakter adına tıklayınca sayfası açılır. Pano canlıdır: ilerleme değişince kendiliğinden yenilenir.
 
 **Settings** sekmesi: aşağıdaki bölüme bakın.

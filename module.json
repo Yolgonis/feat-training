@@ -2,7 +2,8 @@
   "id": "feat-training",
   "title": "Feat Training Tracker",
   "description": "Track downtime feat training progress in Foundry VTT with configurable goals, checkpoints, ability checks, and a sheet tab that stays active after rerenders.",
-  "version": "3.3.0",
+  "version": "3.4.0",
+  "socket": true,
   "compatibility": {
     "minimum": "13",
     "verified": "13.351"
