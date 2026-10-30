@@ -1099,7 +1099,7 @@ async function openDashboard() {
     classes: ["ftd-dialog"],
     window: { title: "Feat Training — Dashboard", icon: "fas fa-graduation-cap", resizable: true },
     // Sabit bir yükseklik: içerik taşınca ilgili sekme kendi içinde kaydırılır.
-    position: { width: 1040, height: Math.min(760, window.innerHeight - 80) },
+    position: { width: Math.min(1240, window.innerWidth - 60), height: Math.min(820, window.innerHeight - 80) },
     content: dashboardShell(),
     buttons: [{ action: "close", label: "Close", default: true }]
   });

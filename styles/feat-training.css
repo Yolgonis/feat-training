@@ -372,3 +372,21 @@
 .ftd-dialog .ftd { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .ftd-dialog .ftd-panel.active { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 0.3rem; }
 .ftd-dialog .dialog-form { flex: 1 1 auto; min-height: 0; }
+
+/* Dashboard / Trainings: daha büyük ve rahat okunur */
+.ftd-trainings { font-size: 1.05rem; }
+.ftd-trainings .ftd-summary { font-size: 1rem; gap: 1.8rem; padding: 0.3rem 0.6rem 0.9rem; }
+.ftd-trainings .ftd-summary strong { font-size: 1.5rem; }
+.ftd-trainings .ftd-table th { font-size: 0.78rem; padding: 0.5rem 0.7rem; }
+.ftd-trainings .ftd-table td { padding: 0.9rem 0.7rem; }
+.ftd-trainings .ftd-name { gap: 0.8rem; }
+.ftd-trainings .ftd-name img { width: 46px; height: 46px; border-width: 2px; }
+.ftd-trainings .ftd-name a { font-size: 1.15rem; }
+.ftd-trainings .ftd-table small { font-size: 0.85rem; }
+.ftd-trainings .ftd-progress { min-width: 260px; }
+.ftd-trainings .ftd-progress .ft-bar { height: 20px; margin-bottom: 0.4rem; }
+.ftd-trainings .ftd-progress .ft-marker { width: 10px; height: 10px; }
+.ftd-trainings .ftd-progress .ft-marker.pending { width: 15px; height: 15px; }
+.ftd-trainings .ftd-chip { font-size: 0.9rem; padding: 0.2rem 0.75rem; }
+.ftd-trainings .ftd-actions .ftd-btn { font-size: 0.92rem; padding: 0.4rem 0.9rem; gap: 0.45rem; }
+.ftd-trainings .ftd-drop { font-size: 0.95rem; }
