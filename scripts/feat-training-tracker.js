@@ -23,7 +23,12 @@ function getFeatGoals() {
     epicBoon: cfg("goalGeneralHours", FEAT_GOALS_DEFAULT.general)
   };
 }
-function getDefaultCheckpointCount() { return Math.round(cfg("defaultCheckpointCount", 10)); }
+// 0 geçerli bir değerdir (checkpoint yok / DC 0); yalnızca geçersiz değer varsayılana düşer.
+function cfgAllowZero(key, fallback) {
+  const value = Number(game.settings.get(MODULE_ID, key));
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+function getDefaultCheckpointCount() { return Math.round(cfgAllowZero("defaultCheckpointCount", 10)); }
 function getRecoveryMultiplier() { return cfg("recoveryMultiplier", 2); }
 function getNaturalOneSteps() { return Math.round(cfg("naturalOneSteps", 2)); }
 const ACTIVE_TABS = globalThis.FeatTrainingActiveTabs ??= new Map();
@@ -47,11 +52,11 @@ Hooks.once("init", () => {
     type: FeatTrainingDashboardMenu,
     restricted: true
   });
-  game.settings.register(MODULE_ID, "checkpointDC", { name: "Checkpoint DC", hint: "Difficulty of the checkpoint ability check.", scope: "world", config: false, type: Number, default: 15 });
+  game.settings.register(MODULE_ID, "checkpointDC", { name: "Checkpoint DC", hint: "Difficulty of the checkpoint ability check. 0 = no roll: checkpoints pass automatically.", scope: "world", config: false, type: Number, default: 15 });
   game.settings.register(MODULE_ID, "goalOriginHours", { name: "Goal: Origin feats (hours)", hint: "Automatic goal for Origin feats.", scope: "world", config: false, type: Number, default: 960 });
   game.settings.register(MODULE_ID, "goalFightingStyleHours", { name: "Goal: Fighting Style feats (hours)", hint: "Automatic goal for Fighting Style feats.", scope: "world", config: false, type: Number, default: 1280 });
   game.settings.register(MODULE_ID, "goalGeneralHours", { name: "Goal: General feats (hours)", hint: "Automatic goal for General feats.", scope: "world", config: false, type: Number, default: 1920 });
-  game.settings.register(MODULE_ID, "defaultCheckpointCount", { name: "Checkpoints per training", hint: "Default number of checkpoints for new trainings.", scope: "world", config: false, type: Number, default: 10 });
+  game.settings.register(MODULE_ID, "defaultCheckpointCount", { name: "Checkpoints per training", hint: "Number of checkpoints per training. 0 = no checkpoints: training completes when the goal is reached.", scope: "world", config: false, type: Number, default: 10 });
   game.settings.register(MODULE_ID, "recoveryEnabled", { name: "Double progress after a failed checkpoint", hint: "When unchecked, a failed checkpoint only sets the training back; there is no faster catch-up.", scope: "world", config: false, type: Boolean, default: true });
   game.settings.register(MODULE_ID, "recoveryMultiplier", { name: "Recovery speed", hint: "Hours count this many times after a failed checkpoint (1 disables the bonus).", scope: "world", config: false, type: Number, default: 2 });
   game.settings.register(MODULE_ID, "naturalOneSteps", { name: "Natural 1 setback (checkpoints)", hint: "How many checkpoints a natural 1 sets the training back (1 = same as a normal failure).", scope: "world", config: false, type: Number, default: 2 });
@@ -310,7 +315,7 @@ function findSheetTabs(root) {
 
 function normalizeCheckpointCount(value) {
   const count = Number(value);
-  if (!Number.isFinite(count) || count < 1) return getDefaultCheckpointCount();
+  if (!Number.isFinite(count) || count < 0) return getDefaultCheckpointCount();
   return Math.floor(count);
 }
 
@@ -334,6 +339,8 @@ function isTrainingComplete(actor, sessions, targetSessions, checkpointCount) {
 // kayıtlar) mevcut ilerlemenin kesin olarak gerisinde kalan checkpoint'ler
 // geçilmiş sayılır; tam üzerinde durulan checkpoint ise henüz geçilmemiştir.
 function getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount) {
+  // Checkpoint yoksa ya da DC 0 ise zar gerekmez: her şey geçilmiş sayılır.
+  if (checkpointCount < 1 || getCheckpointDC() === 0) return targetSessions;
   const stored = actor.getFlag(MODULE_ID, "clearedCheckpoint");
   // Geçilmiş checkpoint, oturum düzeltmesiyle (ör. çıkarıp geri ekleme) kaybolmaz.
   if (Number.isFinite(stored)) return stored;
@@ -393,7 +400,7 @@ function isNaturalOne(roll) {
 }
 
 function getCheckpointDC() {
-  return cfg("checkpointDC", CHECKPOINT_DC);
+  return cfgAllowZero("checkpointDC", CHECKPOINT_DC);
 }
 
 // Hedef: GM'in elle girdiği değer > bağlı feat'in kategorisi > varsayılan.
@@ -787,6 +794,14 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   tab.querySelector(".feat-training-open-dashboard")?.addEventListener("click", () => openDashboard());
 }
 
+// Hedefe ulaşılınca: zar gerekiyorsa son checkpoint hatırlatılır; checkpoint yoksa ya da DC 0 ise
+// eğitim doğrudan tamamlanır (Grant feat hazır).
+async function announceReachedTarget(actor, checkpointCount) {
+  if (checkpointCount > 0 && getCheckpointDC() > 0) {
+    ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
+  } else await completeTraining(actor);
+}
+
 // Saat ekler: geçilmemiş checkpoint'te durur, telafi bölgesinde katlanır. Sekme ve dashboard kullanır.
 async function addHours(actor, amount) {
   const targetSessions = getTargetSessions(actor);
@@ -801,12 +816,13 @@ async function addHours(actor, amount) {
 
   const limit = getNextBlockingCheckpoint(cleared, targetSessions, checkpointCount);
   const gain = getProgressGain(current, amount, getRecoveryUntil(actor, current));
-  const next = Math.min(current + gain, limit);
+  // Eşiği aşmış ilerleme (ör. checkpoint sonradan açıldıysa) hiçbir zaman geriye gitmez.
+  const next = Math.max(current, Math.min(current + gain, limit));
 
   await setSessions(actor, next, targetSessions, checkpointCount);
 
   if (next >= targetSessions && current < targetSessions) {
-    ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
+    await announceReachedTarget(actor, checkpointCount);
   } else if (next < current + gain) {
     ui.notifications.info(`${actor.name} reached a checkpoint at ${next} h; the remaining hours were not added.`);
   } else if (gain > amount) {
@@ -835,7 +851,7 @@ async function setHoursDialog(actor) {
   });
 
   if (next >= targetSessions && current < targetSessions) {
-    ui.notifications.info(`${actor.name} reached the final checkpoint; pass its check to complete training.`);
+    await announceReachedTarget(actor, checkpointCount);
   } else ui.notifications.info(`${actor.name}'s hours were set to ${next}.`);
 }
 
@@ -991,7 +1007,7 @@ function refreshDashboard() {
 // Ad, ipucu ve varsayılan değerler ayar kaydından okunur (init kancasında).
 const SETTING_GROUPS = [
   { title: "Visibility", items: [{ key: "showToPlayers", type: "bool" }] },
-  { title: "Checkpoints", items: [{ key: "checkpointDC", type: "number", min: 1 }, { key: "defaultCheckpointCount", type: "number", min: 1 }] },
+  { title: "Checkpoints", items: [{ key: "checkpointDC", type: "number", min: 0 }, { key: "defaultCheckpointCount", type: "number", min: 0 }] },
   { title: "Failure and recovery", items: [
     { key: "recoveryEnabled", type: "bool" },
     { key: "recoveryMultiplier", type: "number", min: 1, step: 0.5 },

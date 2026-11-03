@@ -33,7 +33,7 @@ GM yönetiminin tamamı tek ekranda: sahne kontrollerinde Token araçları altı
 Tüm kurallar dashboard'ın **Settings** sekmesinde yönetilir (Foundry'nin modül ayarları penceresinde görünmezler; orada yalnızca dashboard'u açan bir düğme vardır). Değişiklikler yazıldığı anda kaydedilir ve açık karakter sayfaları yenilenir. **Reset to defaults** her kuralı varsayılana döndürür. Hepsi dünya ayarıdır, yalnızca GM değiştirir.
 
 - **Visibility:** *Show training tab to players* (varsayılan açık). Kapalıyken oyuncular sekmeyi görmez; karakter bir checkpoint'e geldiğinde yalnızca Roll düğmeli sade bir sekme çıkar ve zardan sonra kaybolur.
-- **Checkpoints:** DC (15) ve yeni eğitimler için checkpoint sayısı (10).
+- **Checkpoints:** DC (15) ve checkpoint sayısı (10). **DC 0** = zar atılmaz, checkpoint'ler otomatik geçilir; **checkpoint sayısı 0** = checkpoint yok. İkisinde de hedefe ulaşan eğitim zarsız tamamlanır ve **Grant feat** hazır olur.
 - **Failure and recovery:** başarısız checkpoint sonrası çift ilerleme açık/kapalı, telafi çarpanı (2) ve doğal 1'de kaç checkpoint geri düşüleceği (2).
 - **Goals (hours):** Origin 960, Fighting Style 1280, General 1920 saat; *Allow Epic Boon training* (kapalı, açılırsa General hedefini kullanır).
 
