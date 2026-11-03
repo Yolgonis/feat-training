@@ -390,3 +390,10 @@
 .ftd-trainings .ftd-chip { font-size: 0.9rem; padding: 0.2rem 0.75rem; }
 .ftd-trainings .ftd-actions .ftd-btn { font-size: 0.92rem; padding: 0.4rem 0.9rem; gap: 0.45rem; }
 .ftd-trainings .ftd-drop { font-size: 0.95rem; }
+
+/* Dashboard: ilerleme çubuğu karakter sayfasındaki renk değişkenlerini kullanır */
+.ftd {
+  --ft-gold: #d6b45f;
+  --ft-gold-dim: rgba(214, 180, 95, 0.35);
+  --ft-border: rgba(214, 180, 95, 0.28);
+}

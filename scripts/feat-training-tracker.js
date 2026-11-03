@@ -341,8 +341,13 @@ function isTrainingComplete(actor, sessions, targetSessions, checkpointCount) {
 // kayıtlar) mevcut ilerlemenin kesin olarak gerisinde kalan checkpoint'ler
 // geçilmiş sayılır; tam üzerinde durulan checkpoint ise henüz geçilmemiştir.
 function getClearedCheckpoint(actor, sessions, targetSessions, checkpointCount) {
-  // Checkpoint yoksa ya da DC 0 ise zar gerekmez: her şey geçilmiş sayılır.
+  // Checkpoint yoksa ya da DC 0 ise zar gerekmez: her şey geçilmiş sayılır. Bu yalnızca okuma içindir;
+  // kalıcı yazılan değer için getStoredCleared kullanılır (DC sonradan açılırsa geçmiş bozulmasın).
   if (checkpointCount < 1 || getCheckpointDC() === 0) return targetSessions;
+  return getStoredCleared(actor, sessions, targetSessions, checkpointCount);
+}
+
+function getStoredCleared(actor, sessions, targetSessions, checkpointCount) {
   const stored = actor.getFlag(MODULE_ID, "clearedCheckpoint");
   // Geçilmiş checkpoint, oturum düzeltmesiyle (ör. çıkarıp geri ekleme) kaybolmaz.
   if (Number.isFinite(stored)) return stored;
@@ -384,7 +389,7 @@ function getProgressGain(current, amount, recoveryUntil) {
 async function failCheckpoint(actor, current, targetSessions, checkpointCount, { steps = 1 } = {}) {
   const earlier = getCheckpointSessions(targetSessions, checkpointCount).filter(value => value < current);
   const previous = earlier[earlier.length - steps] ?? 0;
-  const cleared = getClearedCheckpoint(actor, current, targetSessions, checkpointCount);
+  const cleared = getStoredCleared(actor, current, targetSessions, checkpointCount);
   await actor.update({
     [`flags.${MODULE_ID}.sessions`]: previous,
     [`flags.${MODULE_ID}.clearedCheckpoint`]: Math.min(cleared, previous),
@@ -540,7 +545,7 @@ async function askGoal(currentGoal, autoGoal) {
 // önceki ilerlemeye göre türetilip kalıcı yazılır); yalnızca Reset sıfırlar.
 async function setSessions(actor, sessions, targetSessions, checkpointCount, { resetCleared = false } = {}) {
   const previous = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-  const cleared = resetCleared ? 0 : getClearedCheckpoint(actor, previous, targetSessions, checkpointCount);
+  const cleared = resetCleared ? 0 : getStoredCleared(actor, previous, targetSessions, checkpointCount);
   const update = {
     [`flags.${MODULE_ID}.sessions`]: sessions,
     [`flags.${MODULE_ID}.clearedCheckpoint`]: cleared
@@ -843,7 +848,7 @@ async function setHoursDialog(actor) {
 
   const next = Math.min(value, targetSessions);
   const cleared = Math.max(
-    getClearedCheckpoint(actor, current, targetSessions, checkpointCount),
+    getStoredCleared(actor, current, targetSessions, checkpointCount),
     getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0
   );
   await actor.update({
