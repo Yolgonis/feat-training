@@ -157,8 +157,10 @@ Hooks.on("createItem", async (item, options, userId) => {
   const name = actor.getFlag(MODULE_ID, "trainingName");
   if (!((identifier && item.system?.identifier === identifier) || item.name === name)) return;
 
+  // Yanlış feat verildiyse dashboard'daki "Undo grant" bunu geri alabilsin diye verilen eşya hatırlanır.
+  await actor.setFlag(MODULE_ID, "lastGranted", { itemId: item.id, name: item.name });
   await resetTraining(actor);
-  ui.notifications.info(`${actor.name}'s training was reset. Drag a new feat onto the training tab to start again.`);
+  ui.notifications.info(`${actor.name}'s training was reset. Drop a new feat on the character's row in the dashboard to start again.`);
 });
 
 async function resetTraining(actor) {
@@ -874,6 +876,29 @@ async function goalDialog(actor) {
   ui.notifications.info(`${actor.name}'s target was set to ${amount} hours${choice === "auto" ? " (automatic)" : ""}.`);
 }
 
+// Eğitimi tamamen kaldırır: saat, hedef ve feat bağı silinir (karaktere zaten verilmiş feat'e dokunmaz).
+async function removeTraining(actor) {
+  const name = actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
+  const ok = await foundry.applications.api.DialogV2.confirm({
+    window: { title: "Remove Training" },
+    content: `<p>Remove <b>${escapeHtml(name)}</b> training from <b>${escapeHtml(actor.name)}</b>? The hours and the feat link are cleared. A feat the character already has is not touched.</p>`,
+    no: { default: true },
+    rejectClose: false
+  });
+  if (!ok) return;
+  await resetTraining(actor);
+  ui.notifications.info(`${actor.name}'s training was removed.`);
+}
+
+// Yanlış verilen feat'i karakterden siler. dnd5e'nin kendi silme penceresi kullanılır, böylece feat'in
+// advancement'ı (ör. yetenek artışı) için dnd5e'nin geri alma akışı devreye girebilir.
+async function undoGrant(actor) {
+  const item = actor.items.get(actor.getFlag(MODULE_ID, "lastGranted")?.itemId ?? "");
+  if (!item) return ui.notifications.warn("The granted feat is no longer on the character.");
+  const deleted = await item.deleteDialog();
+  if (deleted) await actor.unsetFlag(MODULE_ID, "lastGranted");
+}
+
 async function resetDialog(actor) {
   const confirmReset = await foundry.applications.api.DialogV2.confirm({
     window: { title: "Reset Training" },
@@ -906,6 +931,7 @@ function trainingRows() {
         ready: linked && isAtCheckpoint(sessions, target, count, cleared),
         recovery: linked ? getRecoveryUntil(actor, sessions) : null,
         granted: linked && hasLinkedFeat(actor),
+        undoItem: actor.items.get(actor.getFlag(MODULE_ID, "lastGranted")?.itemId ?? ""),
         percent: Math.min(100, Math.round((sessions / target) * 100))
       };
     })
@@ -956,7 +982,9 @@ function dashboardHtml() {
         ${actionButton("add", "plus", "Add hours", "Add the hours the character trained", { disabled: noFeat })}
         ${actionButton("set", "pen-to-square", "Set hours", "Write the total hours directly", { disabled: noFeat })}
         ${actionButton("goal", "bullseye", "Goal", "Change the target hours", { disabled: noFeat })}
-        ${actionButton("reset", "rotate-left", "Reset", "Clear this training and start over", { disabled: noFeat, danger: true })}
+        ${actionButton("reset", "rotate-left", "Reset", "Set the hours back to 0 (keeps the feat)", { disabled: noFeat, danger: true })}
+        ${actionButton("unlink", "link-slash", "Remove", "Remove this training completely (hours and feat)", { disabled: noFeat, danger: true })}
+        ${r.undoItem ? actionButton("undo", "trash", "Undo grant", `Delete the granted ${escapeHtml(r.undoItem.name)} from the character`, { danger: true }) : ""}
       </div></td>
     </tr>`;
   }).join("");
@@ -971,6 +999,8 @@ const DASHBOARD_ACTIONS = {
   set: setHoursDialog,
   goal: goalDialog,
   reset: resetDialog,
+  unlink: removeTraining,
+  undo: undoGrant,
   grant: (actor, event) => grantFeat(actor, { here: event?.shiftKey })
 };
 
