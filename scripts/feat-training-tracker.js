@@ -874,11 +874,10 @@ async function resetDialog(actor) {
 // ---------------- GM dashboard ----------------
 let dashboard = null;
 
-// Oyuncu karakterleri (eğitimi olmasa da) ve eğitimi süren diğer karakterler.
+// Tüm karakterler (eğitimi başlamamış olanlar da "No feat" satırı olarak görünür).
 function trainingRows() {
   return game.actors
-    .filter(a => a.type === "character"
-      && (a.hasPlayerOwner || a.getFlag(MODULE_ID, "featUuid") || (a.getFlag(MODULE_ID, "sessions") ?? 0) > 0))
+    .filter(a => a.type === "character")
     .map(actor => {
       const sessions = actor.getFlag(MODULE_ID, "sessions") ?? 0;
       const target = getTargetSessions(actor);
