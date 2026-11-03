@@ -837,20 +837,43 @@ async function addHours(actor, amount) {
   }
 }
 
+// Set hours penceresi. Kayıtlı "geçilen checkpoint" saatin ilerisindeyse (bozuk ya da saat düşürülmüş
+// kayıt) bir onay kutusu çıkar: işaretlenirse geçilen checkpoint'ler saate göre yeniden hesaplanır.
+async function askHoursWithRepair(current, offerRepair) {
+  const repairField = offerRepair
+    ? `<div class="form-group"><label class="checkbox"><input type="checkbox" name="repair"> Recalculate passed checkpoints from these hours</label>
+       <p class="hint">Passed checkpoints are saved ahead of the current hours. Check this to forget the ones beyond the hours entered.</p></div>`
+    : "";
+  const result = await foundry.applications.api.DialogV2.prompt({
+    window: { title: "Set hours" },
+    content: `<div class="form-group"><label>Hours</label><input type="number" name="amount" value="${current}" min="0" step="1" autofocus></div>${repairField}`,
+    ok: {
+      icon: "fas fa-check",
+      label: "Apply",
+      callback: (event, button) => ({ value: button.form.elements.amount.valueAsNumber, repair: Boolean(button.form.elements.repair?.checked) })
+    },
+    rejectClose: false
+  });
+  if (!result || !Number.isFinite(result.value) || result.value < 0) return null;
+  return { value: Math.floor(result.value), repair: result.repair };
+}
+
 // Saat sayısını doğrudan yazar (GM kararı): değerin altındaki checkpoint'ler geçilmiş sayılır,
 // değer tam bir checkpoint'teyse onun zarı yine istenir.
 async function setHoursDialog(actor) {
   const targetSessions = getTargetSessions(actor);
   const checkpointCount = normalizeCheckpointCount(actor.getFlag(MODULE_ID, "checkpointCount") ?? getDefaultCheckpointCount());
   const current = actor.getFlag(MODULE_ID, "sessions") ?? 0;
-  const value = await askSessionAmount("Set hours", current, { min: 0 });
-  if (value === null) return;
+  const stored = getStoredCleared(actor, current, targetSessions, checkpointCount);
+  const answer = await askHoursWithRepair(current, stored > current);
+  if (!answer) return;
 
-  const next = Math.min(value, targetSessions);
-  const cleared = Math.max(
-    getStoredCleared(actor, current, targetSessions, checkpointCount),
-    getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0
-  );
+  const next = Math.min(answer.value, targetSessions);
+  // Onay kutusu işaretliyse, saatin ilerisinde "geçilmiş" görünen checkpoint'ler unutulur ve saate kadar
+  // olanlar (saat tam bir checkpoint'teyse o da) geçilmiş sayılır. Yoksa yalnızca saatin altındakiler eklenir.
+  const cleared = answer.repair
+    ? getCheckpointSessions(targetSessions, checkpointCount).filter(v => v <= next).pop() ?? 0
+    : Math.max(stored, getCheckpointSessions(targetSessions, checkpointCount).filter(v => v < next).pop() ?? 0);
   await actor.update({
     [`flags.${MODULE_ID}.sessions`]: next,
     [`flags.${MODULE_ID}.clearedCheckpoint`]: cleared,
@@ -937,6 +960,7 @@ function trainingRows() {
         recovery: linked ? getRecoveryUntil(actor, sessions) : null,
         granted: linked && hasLinkedFeat(actor),
         undoItem: actor.items.get(actor.getFlag(MODULE_ID, "lastGranted")?.itemId ?? ""),
+        ahead: linked && getStoredCleared(actor, sessions, target, count) > sessions,
         percent: Math.min(100, Math.round((sessions / target) * 100))
       };
     })
@@ -979,7 +1003,8 @@ function dashboardHtml() {
         : escapeHtml(name) + (category ? " <small>" + (FEAT_CATEGORY_LABELS[category] ?? category) + "</small>" : "")}</td>
       <td class="ftd-progress">${noFeat ? "—" : `
         <div class="ft-bar"><div class="ft-bar-fill" style="width: ${r.percent}%"></div>${renderCheckpointMarkers(r.sessions, r.cleared, r.target, r.count)}</div>
-        <small>${r.sessions} / ${r.target} h · ${r.percent}%</small>`}
+        <small>${r.sessions} / ${r.target} h · ${r.percent}%</small>
+        ${r.ahead ? '<small class="ftd-warn" data-tooltip="Passed checkpoints are saved ahead of the hours. Use Set hours and tick the recalculate option to repair.">⚠ checkpoints ahead of hours</small>' : ""}`}
       </td>
       <td>${statusChip(r)}</td>
       <td class="ftd-actions"><div class="ftd-btns">

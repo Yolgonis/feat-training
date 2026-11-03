@@ -406,3 +406,5 @@
 .ftd-trainings .ftd-name a, .ftd-trainings .ftd-drop { white-space: nowrap; }
 .ftd-trainings .ftd-progress { min-width: 220px; }
 .ftd-trainings .ftd-actions { width: 1%; white-space: nowrap; }
+
+.ftd-trainings .ftd-warn { display: block; margin-top: 0.15rem; color: #f0b27a; }
