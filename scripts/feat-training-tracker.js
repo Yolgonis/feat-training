@@ -923,8 +923,8 @@ async function removeTraining(actor) {
 async function undoGrant(actor) {
   const item = actor.items.get(actor.getFlag(MODULE_ID, "lastGranted")?.itemId ?? "");
   if (!item) return ui.notifications.warn("The granted feat is no longer on the character.");
-  const deleted = await item.deleteDialog();
-  if (deleted) await actor.unsetFlag(MODULE_ID, "lastGranted");
+  // Advancement'lı feat'te dnd5e kendi onay penceresini açar; kayıt, eşya silinince deleteItem kancasında temizlenir.
+  await item.deleteDialog();
 }
 
 async function resetDialog(actor) {
@@ -1198,7 +1198,12 @@ Hooks.on("updateActor", (actor, changes) => {
   if (dashboard?.rendered && foundry.utils.hasProperty(changes, `flags.${MODULE_ID}`)) refreshDashboard();
 });
 Hooks.on("createItem", () => { if (dashboard?.rendered) refreshDashboard(); });
-Hooks.on("deleteItem", () => { if (dashboard?.rendered) refreshDashboard(); });
+Hooks.on("deleteItem", item => {
+  // Verilen feat silindiyse (Undo grant ya da elle) "son verilen feat" kaydı da temizlenir.
+  const actor = item.parent;
+  if (game.user.isGM && actor?.getFlag?.(MODULE_ID, "lastGranted")?.itemId === item.id) actor.unsetFlag(MODULE_ID, "lastGranted");
+  if (dashboard?.rendered) refreshDashboard();
+});
 
 Hooks.on("getSceneControlButtons", controls => {
   const tokens = controls.tokens;
