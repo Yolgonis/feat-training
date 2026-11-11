@@ -189,7 +189,7 @@ Hooks.on("createItem", async (item, options, userId) => {
 
 async function resetTraining(actor) {
   const keys = ["sessions", "clearedCheckpoint", "recoveryUntil", "targetSessions", "trainingName",
-    "featUuid", "featCategory", "featIdentifier", "featRepeatable"];
+    "featUuid", "featCategory", "featIdentifier", "featRepeatable", "request"];
   await actor.update(Object.fromEntries(keys.map(key => [`flags.${MODULE_ID}.-=${key}`, null])));
 }
 
@@ -467,6 +467,8 @@ async function linkFeat(actor, item) {
     [`flags.${MODULE_ID}.featIdentifier`]: item.system.identifier || null,
     [`flags.${MODULE_ID}.featRepeatable`]: Boolean(item.system.prerequisites?.repeatable),
     [`flags.${MODULE_ID}.trainingName`]: item.name,
+    // Bağlanan feat, oyuncunun bekleyen isteğinin yerini alır.
+    [`flags.${MODULE_ID}.-=request`]: null,
     ...(useAuto ? {
       [`flags.${MODULE_ID}.-=targetSessions`]: null,
       [`flags.${MODULE_ID}.sessions`]: Math.min(current, target),
@@ -751,6 +753,19 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
       </div>`;
   }
 
+  // Eğitimde feat yokken: sahibi (ya da GM) seçiciyi açar; oyuncunun isteği GM onayını bekler.
+  const request = featLinked ? null : actor.getFlag(MODULE_ID, "request");
+  const chooser = featLinked || !actor.isOwner ? "" : request
+    ? `<div class="ft-banner ft-banner-request">
+        <i class="fas fa-hourglass-half"></i>
+        <div class="ft-banner-text"><strong>${t("Feat requested")}</strong>
+          <span>${t("{feat}: waiting for the GM to approve.", { feat: escapeHtml(request.name) })}</span></div>
+        <button type="button" class="feat-training-cancel-request">${t("Cancel request")}</button>
+      </div>`
+    : `<footer class="ft-actions">
+        <button type="button" class="feat-training-choose"><i class="fas fa-book-open"></i> ${t("Choose a feat")}</button>
+      </footer>`;
+
   if (isPlayerViewLimited()) {
     // Gizli mod: ilerleme gösterilmez, yalnızca checkpoint zarı.
     tab.innerHTML = `
@@ -789,6 +804,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
       </section>
 
       ${banner}
+      ${chooser}
 
       ${isGM ? `
         <footer class="ft-actions">
@@ -833,6 +849,8 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
   }
 
   tab.querySelector(".feat-training-open-dashboard")?.addEventListener("click", () => openDashboard());
+  tab.querySelector(".feat-training-choose")?.addEventListener("click", () => openFeatPicker(actor));
+  tab.querySelector(".feat-training-cancel-request")?.addEventListener("click", () => actor.unsetFlag(MODULE_ID, "request"));
 }
 
 // Hedefe ulaşılınca: zar gerekiyorsa son checkpoint hatırlatılır; checkpoint yoksa ya da DC 0 ise
@@ -976,6 +994,130 @@ async function resetDialog(actor) {
   await setSessions(actor, 0, targetSessions, checkpointCount, { resetCleared: true });
 }
 
+// ---------------- Marifet seçici ----------------
+// Compendium'lardaki feat'leri arama ve süzgeçlerle listeler. GM seçince eğitim doğrudan başlar;
+// oyuncu seçince karakterde bir istek kaydı oluşur ve GM gösterge panelinden onaylar ya da reddeder.
+let featPicker = null;
+
+// Kullanıcının görebildiği bütün Item paketlerindeki feat'ler (Foundry dizini kendisi önbelleğe alır).
+async function loadFeatIndex() {
+  const fields = ["system.type.value", "system.type.subtype", "system.requirements", "system.identifier", "system.prerequisites.repeatable"];
+  const feats = [];
+  for (const pack of game.packs) {
+    if (pack.documentName !== "Item" || !pack.visible) continue;
+    const index = await pack.getIndex({ fields });
+    for (const entry of index) {
+      if (entry.type !== "feat" || entry.system?.type?.value !== "feat") continue;
+      feats.push({
+        uuid: entry.uuid, name: entry.name, img: entry.img,
+        category: entry.system.type.subtype || "",
+        requirements: entry.system.requirements || "",
+        identifier: entry.system.identifier || "",
+        repeatable: Boolean(entry.system.prerequisites?.repeatable),
+        pack: pack.collection, source: pack.title
+      });
+    }
+  }
+  return feats.sort((a, b) => a.name.localeCompare(b.name, activeLanguage()));
+}
+
+function featPickerHtml(actor, feats) {
+  const known = feat => !feat.repeatable && actor.items.some(i => i.type === "feat"
+    && ((feat.identifier && i.system?.identifier === feat.identifier) || i.name === feat.name));
+  const option = (value, label) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+  const categories = [...new Set(feats.map(f => f.category).filter(Boolean))];
+  const sources = [...new Map(feats.map(f => [f.pack, f.source])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const rows = feats.map(feat => {
+    const has = known(feat);
+    return `<div class="ftp-row" data-uuid="${feat.uuid}" data-name="${escapeHtml(feat.name.toLocaleLowerCase())}" data-category="${escapeHtml(feat.category)}" data-pack="${escapeHtml(feat.pack)}">
+      <img src="${escapeHtml(feat.img ?? "icons/svg/book.svg")}" alt="">
+      <div class="ftp-main">
+        <a data-act="view">${escapeHtml(feat.name)}</a>
+        <small>${[feat.category ? categoryLabel(feat.category) : "", escapeHtml(feat.requirements), escapeHtml(feat.source)].filter(Boolean).join(" · ")}</small>
+      </div>
+      <button type="button" data-act="pick" class="ftd-btn ${has ? "" : "ftd-btn-primary"}" ${has ? "disabled" : ""}>${has ? t("Already known") : game.user.isGM ? t("Start training") : t("Request")}</button>
+    </div>`;
+  }).join("");
+  return `<div class="ftp" lang="${activeLanguage()}">
+    <div class="ftp-filters">
+      <input type="search" name="q" placeholder="${t("Search feats")}" autofocus>
+      <select name="category">${option("", t("All categories"))}${categories.map(c => option(c, categoryLabel(c))).join("")}</select>
+      <select name="source">${option("", t("All sources"))}${sources.map(([id, title]) => option(id, title)).join("")}</select>
+    </div>
+    <div class="ftp-list">${rows}</div>
+    <p class="ftp-empty" ${feats.length ? "hidden" : ""}>${t("No feats match.")}</p>
+  </div>`;
+}
+
+async function openFeatPicker(actor) {
+  if (!actor?.isOwner) return;
+  if (actor.getFlag(MODULE_ID, "featUuid")) return ui.notifications.warn(t("{actor} already has a feat in training.", { actor: actor.name }));
+  await featPicker?.close();
+  const feats = (await loadFeatIndex())
+    .filter(feat => feat.category !== "epicBoon" || game.settings.get(MODULE_ID, "allowEpicBoon"));
+  featPicker = new foundry.applications.api.DialogV2({
+    classes: ["ftd-dialog", "ftp-dialog"],
+    window: { title: t("Choose a feat for {actor}", { actor: actor.name }), icon: "fas fa-book-open", resizable: true },
+    position: { width: Math.min(640, window.innerWidth - 60), height: Math.min(720, window.innerHeight - 80) },
+    content: featPickerHtml(actor, feats),
+    buttons: [{ action: "close", label: t("Close"), default: true }]
+  });
+  await featPicker.render({ force: true });
+  const root = featPicker.element.querySelector(".ftp");
+
+  const applyFilters = () => {
+    const query = root.querySelector('[name="q"]').value.trim().toLocaleLowerCase();
+    const category = root.querySelector('[name="category"]').value;
+    const source = root.querySelector('[name="source"]').value;
+    let shown = 0;
+    for (const row of root.querySelectorAll(".ftp-row")) {
+      const visible = (!query || row.dataset.name.includes(query))
+        && (!category || row.dataset.category === category)
+        && (!source || row.dataset.pack === source);
+      row.hidden = !visible;
+      if (visible) shown++;
+    }
+    root.querySelector(".ftp-empty").hidden = shown > 0;
+  };
+  root.querySelector(".ftp-filters").addEventListener("input", applyFilters);
+  // Arama kutusunda Enter pencereyi kapatmasın.
+  root.querySelector('[name="q"]').addEventListener("keydown", event => { if (event.key === "Enter") event.preventDefault(); });
+
+  root.querySelector(".ftp-list").addEventListener("click", async event => {
+    const row = event.target.closest(".ftp-row");
+    const act = event.target.closest("[data-act]")?.dataset.act;
+    if (!row || !act) return;
+    const item = await fromUuid(row.dataset.uuid);
+    if (!item) return ui.notifications.warn(t("The linked feat could not be found."));
+    if (act === "view") return item.sheet.render(true);
+    if (game.user.isGM) {
+      if (await linkFeat(actor, item)) featPicker.close();
+      return;
+    }
+    await actor.setFlag(MODULE_ID, "request", { uuid: item.uuid, name: item.name, userId: game.user.id });
+    ui.notifications.info(t("Your request for {feat} was sent to the GM.", { feat: item.name }));
+    featPicker.close();
+  });
+  return featPicker;
+}
+
+// GM: oyuncunun isteğini onaylar (eğitim başlar) ya da reddeder.
+async function approveRequest(actor) {
+  const request = actor.getFlag(MODULE_ID, "request");
+  const item = await fromUuid(request?.uuid ?? "");
+  if (!item) {
+    await actor.unsetFlag(MODULE_ID, "request");
+    return ui.notifications.warn(t("The requested feat could not be found; the request was removed."));
+  }
+  await linkFeat(actor, item);
+}
+
+async function declineRequest(actor) {
+  const request = actor.getFlag(MODULE_ID, "request");
+  await actor.unsetFlag(MODULE_ID, "request");
+  if (request) ui.notifications.info(t("{actor}'s request for {feat} was declined.", { actor: actor.name, feat: request.name }));
+}
+
 // ---------------- GM dashboard ----------------
 let dashboard = null;
 
@@ -997,14 +1139,16 @@ function trainingRows() {
         granted: linked && hasLinkedFeat(actor),
         undoItem: actor.items.get(actor.getFlag(MODULE_ID, "lastGranted")?.itemId ?? ""),
         ahead: linked && getStoredCleared(actor, sessions, target, count) > sessions,
+        request: linked ? null : actor.getFlag(MODULE_ID, "request") ?? null,
         percent: Math.min(100, Math.round((sessions / target) * 100))
       };
     })
-    .sort((a, b) => (b.linked - a.linked) || (b.completed - a.completed) || (b.ready - a.ready)
+    .sort((a, b) => (Boolean(b.request) - Boolean(a.request)) || (b.linked - a.linked) || (b.completed - a.completed) || (b.ready - a.ready)
       || (b.percent - a.percent) || a.actor.name.localeCompare(b.actor.name));
 }
 
 function statusChip(r) {
+  if (r.request) return `<span class="ftd-chip ftd-done">${t("Request")}</span>`;
   if (!r.linked) return `<span class="ftd-chip ftd-muted">${t("No feat")}</span>`;
   if (r.completed) return r.granted ? `<span class="ftd-chip ftd-ok">${t("Feat granted")}</span>` : `<span class="ftd-chip ftd-done">${t("Complete")}</span>`;
   if (r.ready) return `<span class="ftd-chip ftd-check">${t("Checkpoint")}</span>`;
@@ -1026,16 +1170,24 @@ function dashboardHtml() {
     <span><strong>${count(r => r.ready)}</strong> ${t("at checkpoint")}</span>
     <span><strong>${count(r => r.completed && !r.granted)}</strong> ${t("ready to grant")}</span>
     <span><strong>${count(r => !r.linked)}</strong> ${t("without a feat")}</span>
+    <span><strong>${count(r => r.request)}</strong> ${t("requests")}</span>
   </div>`;
   const body = rows.map(r => {
     const name = r.actor.getFlag(MODULE_ID, "trainingName") ?? DEFAULT_TRAINING_NAME;
     const category = r.actor.getFlag(MODULE_ID, "featCategory");
     const noFeat = !r.linked;
     const grant = r.completed && !r.granted ? actionButton("grant", "award", t("Grant feat"), t("The player chooses the feat's options when online (Shift-click: you choose)"), { primary: true }) : "";
-    const rowClass = r.ready ? "ftd-row-check" : r.completed && !r.granted ? "ftd-row-done" : "";
+    const rowClass = r.ready ? "ftd-row-check" : r.request || (r.completed && !r.granted) ? "ftd-row-done" : "";
+    // Eğitimi olmayan karakter: oyuncunun isteği varsa onay/ret, yoksa GM listeden seçebilir.
+    const start = !noFeat ? "" : r.request
+      ? actionButton("approve", "check", t("Approve"), t("Start this training"), { primary: true })
+        + actionButton("decline", "xmark", t("Decline"), t("Remove the request"), { danger: true })
+      : actionButton("choose", "book-open", t("Choose feat"), t("Pick a feat from the list"));
     return `<tr data-actor="${r.actor.id}" class="${rowClass}">
       <td class="ftd-name"><img src="${r.actor.img}" alt=""><a data-act="sheet">${escapeHtml(r.actor.name)}</a></td>
-      <td>${noFeat ? `<em class="ftd-drop"><i class="fas fa-hand-pointer"></i> ${t("Drop a feat here")}</em>`
+      <td>${noFeat ? (r.request
+        ? `${escapeHtml(r.request.name)} <small>${t("requested by {player}", { player: escapeHtml(game.users.get(r.request.userId)?.name ?? "?") })}</small>`
+        : `<em class="ftd-drop"><i class="fas fa-hand-pointer"></i> ${t("Drop a feat here")}</em>`)
         : escapeHtml(name) + (category ? " <small>" + categoryLabel(category) + "</small>" : "")}</td>
       <td class="ftd-progress">${noFeat ? "—" : `
         <div class="ft-bar"><div class="ft-bar-fill" style="width: ${r.percent}%"></div>${renderCheckpointMarkers(r.sessions, r.cleared, r.target, r.count)}</div>
@@ -1045,6 +1197,7 @@ function dashboardHtml() {
       <td>${statusChip(r)}</td>
       <td class="ftd-actions"><div class="ftd-btns">
         ${grant}
+        ${start}
         ${actionButton("add", "plus", t("Add hours"), t("Add the hours the character trained"), { disabled: noFeat })}
         ${actionButton("set", "pen-to-square", t("Set hours"), t("Write the total hours directly"), { disabled: noFeat })}
         ${actionButton("goal", "bullseye", t("Goal"), t("Change the target hours"), { disabled: noFeat })}
@@ -1067,7 +1220,10 @@ const DASHBOARD_ACTIONS = {
   reset: resetDialog,
   unlink: removeTraining,
   undo: undoGrant,
-  grant: (actor, event) => grantFeat(actor, { here: event?.shiftKey })
+  grant: (actor, event) => grantFeat(actor, { here: event?.shiftKey }),
+  choose: openFeatPicker,
+  approve: approveRequest,
+  decline: declineRequest
 };
 
 function wireDashboard(root) {
@@ -1246,6 +1402,12 @@ class FeatTrainingDashboardMenu extends foundry.applications.api.ApplicationV2 {
 Hooks.on("updateActor", (actor, changes) => {
   if (dashboard?.rendered && foundry.utils.hasProperty(changes, `flags.${MODULE_ID}`)) refreshDashboard();
 });
+// Oyuncu bir marifet isteyince aktif GM'e haber verilir.
+Hooks.on("updateActor", (actor, changes, options, userId) => {
+  const request = foundry.utils.getProperty(changes, `flags.${MODULE_ID}.request`);
+  if (!request?.uuid || !game.users.activeGM?.isSelf || userId === game.user.id) return;
+  ui.notifications.info(t("{actor} asks to train {feat}. Approve it in the dashboard.", { actor: actor.name, feat: request.name }));
+});
 Hooks.on("createItem", () => { if (dashboard?.rendered) refreshDashboard(); });
 Hooks.on("deleteItem", item => {
   // Verilen feat silindiyse (Undo grant ya da elle) "son verilen feat" kaydı da temizlenir.
@@ -1264,7 +1426,7 @@ Hooks.on("getSceneControlButtons", controls => {
 });
 
 Hooks.once("ready", () => {
-  game.modules.get(MODULE_ID).api = { openDashboard };
+  game.modules.get(MODULE_ID).api = { openDashboard, openFeatPicker };
   game.socket.on(SOCKET_NAME, onGrantRequest);
 });
 

@@ -409,3 +409,18 @@
 .ftd-trainings .ftd-actions { width: 1%; white-space: nowrap; }
 
 .ftd-trainings .ftd-warn { display: block; margin-top: 0.15rem; color: #f0b27a; }
+
+/* Marifet seçici */
+.ftp { display: flex; flex-direction: column; gap: 0.6rem; flex: 1 1 auto; min-height: 0; }
+.ftp-filters { display: flex; gap: 0.5rem; flex: none; }
+.ftp-filters input[type="search"] { flex: 2; min-width: 0; }
+.ftp-filters select { flex: 1; min-width: 0; }
+.ftp-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.ftp-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.3rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.ftp-row[hidden] { display: none; }
+.ftp-row img { width: 32px; height: 32px; flex: none; border: none; border-radius: 4px; object-fit: cover; }
+.ftp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ftp-main a { font-weight: 600; cursor: pointer; }
+.ftp-main small { opacity: 0.65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ftp-row .ftd-btn { flex: none; }
+.ftp-empty { opacity: 0.7; text-align: center; margin: 1rem 0; }

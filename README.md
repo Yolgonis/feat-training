@@ -15,6 +15,14 @@ The module adds a graduation-cap tab to character sheets. The GM links a feat, a
 - **Completion:** passing the final check posts a chat message. The GM then grants the linked feat with Grant Feat, through dnd5e's advancement flow (e.g. the feat's ability score increase). The training resets once the feat is on the character.
 - The tab stays open after sheet updates and re-renders.
 
+## Feat picker (3.9.0)
+
+Eğitimde feat'i olmayan karakterin eğitim sekmesinde **Choose a feat** düğmesi çıkar. Düğme, kullanıcının görebildiği bütün Item compendium'larındaki feat'leri listeleyen bir pencere açar: ada göre arama, kategori ve kaynak (paket) süzgeçleri; ada tıklamak feat'in sayfasını açar. Karakterin zaten sahip olduğu, tekrarlanamayan feat'ler "Already known" olarak kapalıdır; Epic Boon'lar yalnızca *Allow Epic Boon training* açıkken listelenir.
+
+- **Oyuncu** bir feat için **Request** der: karakterde bir istek kaydı oluşur (`flags.feat-training.request`), aktif GM'e bildirim gider ve sekmede "Feat requested" şeridi çıkar (oyuncu **Cancel request** ile geri alabilir).
+- **GM** gösterge panelinde isteği satırın başında görür: **Approve** eğitimi başlatır (kategoriye göre otomatik hedefle), **Decline** isteği siler. İsteği olmayan satırda **Choose feat** aynı pencereyi açar ve GM'in seçtiği feat doğrudan bağlanır. Sürükle-bırak eskisi gibi çalışır.
+- Sekme oyunculardan gizliyken (*Show training tab to players* kapalı) oyuncular seçiciyi göremez.
+
 ## GM dashboard
 
 GM yönetiminin tamamı tek ekranda: sahne kontrollerinde Token araçları altındaki mezuniyet şapkası düğmesinden (ya da `game.modules.get('feat-training').api.openDashboard()`, ya da Foundry modül ayarlarındaki **Open dashboard** düğmesinden) açılır. Karakter sayfasında GM için yalnızca **Open dashboard** düğmesi kalır.
