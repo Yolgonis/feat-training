@@ -9,8 +9,6 @@ const CHECKPOINT_DC = 15;
 // İlerleme saat cinsindendir (oturumlar farklı uzunlukta olabilir). Kategoriye göre otomatik hedef.
 const FEAT_GOALS_DEFAULT = { origin: 960, fightingStyle: 1280, general: 1920 };
 const LEGACY_HOURS_PER_SESSION = 4;
-const FEAT_CATEGORY_LABELS = { origin: "Origin", fightingStyle: "Fighting Style", general: "General", epicBoon: "Epic Boon" };
-
 // Çeviri: koddaki İngilizce metin anahtardır. Sözlükler scripts/lang-<dil>.js dosyalarındadır ve bu
 // betikten önce yüklenir; sözlükte olmayan metin İngilizce kalır. Yer tutucular {ad} biçimindedir.
 const LANGUAGES = globalThis.FeatTrainingLanguages ?? {};
@@ -24,6 +22,10 @@ function activeLanguage() {
 function t(text, data) {
   const translated = LANGUAGES[activeLanguage()]?.[text] ?? text;
   return data ? translated.replace(/\{(\w+)\}/g, (match, key) => (key in data ? data[key] : match)) : translated;
+}
+const FEAT_CATEGORY_LABELS = { origin: L("Origin"), fightingStyle: L("Fighting Style"), general: L("General"), epicBoon: L("Epic Boon") };
+function categoryLabel(category) {
+  return FEAT_CATEGORY_LABELS[category] ? t(FEAT_CATEGORY_LABELS[category]) : category;
 }
 // Dil ya da kurallar değişince açık karakter sayfaları yeniden çizilir.
 function rerenderActorSheets() {
@@ -74,7 +76,11 @@ Hooks.once("init", () => {
     type: FeatTrainingDashboardMenu,
     restricted: true
   });
-  game.settings.register(MODULE_ID, "language", { name: L("Language"), hint: L("Language of the training tab, the dashboard and the messages. Automatic follows each user's Foundry language."), scope: "world", config: false, type: String, default: "auto", onChange: rerenderActorSheets });
+  game.settings.register(MODULE_ID, "language", { name: L("Language"), hint: L("Language of the training tab, the dashboard and the messages. Automatic follows each user's Foundry language."), scope: "world", config: false, type: String, default: "auto", onChange: () => {
+    // Pencere başlığı, sekmeler ve bütün metinler için açık dashboard yeniden açılır.
+    rerenderActorSheets();
+    if (dashboard?.rendered) reopenDashboard();
+  } });
   game.settings.register(MODULE_ID, "checkpointDC", { name: L("Checkpoint DC"), hint: L("Difficulty of the checkpoint ability check. 0 = no roll: checkpoints pass automatically."), scope: "world", config: false, type: Number, default: 15 });
   game.settings.register(MODULE_ID, "goalOriginHours", { name: L("Goal: Origin feats (hours)"), hint: L("Automatic goal for Origin feats."), scope: "world", config: false, type: Number, default: 960 });
   game.settings.register(MODULE_ID, "goalFightingStyleHours", { name: L("Goal: Fighting Style feats (hours)"), hint: L("Automatic goal for Fighting Style feats."), scope: "world", config: false, type: Number, default: 1280 });
@@ -468,7 +474,7 @@ async function linkFeat(actor, item) {
       [`flags.${MODULE_ID}.-=recoveryUntil`]: null
     } : {})
   });
-  const names = { actor: actor.name, feat: item.name, category: FEAT_CATEGORY_LABELS[category], hours: target };
+  const names = { actor: actor.name, feat: item.name, category: categoryLabel(category), hours: target };
   if (useAuto) ui.notifications.info(t("{actor} is now training {feat} ({category}, {hours} hours).", names));
   else if (keepManual) ui.notifications.info(t("{actor} is now training {feat}; the manual goal of {hours} hours was kept. Use Goal to switch to automatic.", names));
   else ui.notifications.info(t("{actor} is now training {feat}. This feat has no category; set the goal manually.", names));
@@ -760,7 +766,7 @@ async function renderFeatTrainingTab(sheet, actor, tab) {
           <span class="ft-eyebrow">${t("Feat Training")}</span>
           <h2>${featLinked ? escapeHtml(trainingName) : (actor.getFlag(MODULE_ID, "trainingName") ? escapeHtml(trainingName) : t("No feat in training"))}</h2>
         </div>
-        ${featCategory ? `<span class="ft-badge">${FEAT_CATEGORY_LABELS[featCategory] ?? featCategory}</span>` : ""}
+        ${featCategory ? `<span class="ft-badge">${categoryLabel(featCategory)}</span>` : ""}
       </header>
 
 
@@ -1030,7 +1036,7 @@ function dashboardHtml() {
     return `<tr data-actor="${r.actor.id}" class="${rowClass}">
       <td class="ftd-name"><img src="${r.actor.img}" alt=""><a data-act="sheet">${escapeHtml(r.actor.name)}</a></td>
       <td>${noFeat ? `<em class="ftd-drop"><i class="fas fa-hand-pointer"></i> ${t("Drop a feat here")}</em>`
-        : escapeHtml(name) + (category ? " <small>" + (FEAT_CATEGORY_LABELS[category] ?? category) + "</small>" : "")}</td>
+        : escapeHtml(name) + (category ? " <small>" + categoryLabel(category) + "</small>" : "")}</td>
       <td class="ftd-progress">${noFeat ? "—" : `
         <div class="ft-bar"><div class="ft-bar-fill" style="width: ${r.percent}%"></div>${renderCheckpointMarkers(r.sessions, r.cleared, r.target, r.count)}</div>
         <small>${t("{hours} / {goal} h", { hours: r.sessions, goal: r.target })} · ${r.percent}%</small>
@@ -1156,9 +1162,8 @@ function wireSettings(root) {
     if (!item) return;
     if (item.type === "bool") return apply(item.key, input.checked);
     if (item.type === "select") {
-      await game.settings.set(MODULE_ID, item.key, input.value);
-      // Dil değişti: pencere başlığı, sekmeler ve bütün metinler için dashboard yeniden açılır.
-      if (item.key === "language") return reopenDashboard();
+      // Dil ayarı kendi onChange'inde dashboard'u yeniden açar; burada ayrıca yenilemeye gerek yok.
+      if (item.key === "language") return game.settings.set(MODULE_ID, item.key, input.value);
       return apply(item.key, input.value);
     }
     const value = Number(input.value);
@@ -1227,7 +1232,6 @@ async function openDashboard() {
 
 async function reopenDashboard() {
   await dashboard?.close();
-  rerenderActorSheets();
   return openDashboard();
 }
 
