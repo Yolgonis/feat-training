@@ -15,7 +15,7 @@ The module adds a graduation-cap tab to character sheets. The GM links a feat, a
 - **Completion:** passing the final check posts a chat message. The GM then grants the linked feat with Grant Feat, through dnd5e's advancement flow (e.g. the feat's ability score increase). The training resets once the feat is on the character.
 - The tab stays open after sheet updates and re-renders.
 
-## Feat picker (3.9.0)
+## Feat picker
 
 Eğitimde feat'i olmayan karakterin eğitim sekmesinde **Choose a feat** düğmesi çıkar. Düğme, kullanıcının görebildiği bütün Item compendium'larındaki feat'leri listeleyen bir pencere açar: ada göre arama, kategori ve kaynak (paket) süzgeçleri; ada tıklamak feat'in sayfasını açar. Karakterin zaten sahip olduğu, tekrarlanamayan feat'ler "Already known" olarak kapalıdır; Epic Boon'lar yalnızca *Allow Epic Boon training* açıkken listelenir.
 
