@@ -25,7 +25,10 @@ function t(text, data) {
 }
 const FEAT_CATEGORY_LABELS = { origin: L("Origin"), fightingStyle: L("Fighting Style"), general: L("General"), epicBoon: L("Epic Boon") };
 function categoryLabel(category) {
-  return FEAT_CATEGORY_LABELS[category] ? t(FEAT_CATEGORY_LABELS[category]) : category;
+  if (FEAT_CATEGORY_LABELS[category]) return t(FEAT_CATEGORY_LABELS[category]);
+  // Modülün hedef tanımlamadığı kategoriler (ör. Dark Gift) dnd5e'nin kendi adıyla gösterilir.
+  const label = CONFIG.DND5E?.featureTypes?.feat?.subtypes?.[category];
+  return typeof label === "string" ? game.i18n.localize(label) : category;
 }
 // Dil ya da kurallar değişince açık karakter sayfaları yeniden çizilir.
 function rerenderActorSheets() {
@@ -90,6 +93,8 @@ Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "recoveryMultiplier", { name: L("Recovery speed"), hint: L("Hours count this many times after a failed checkpoint (1 disables the bonus)."), scope: "world", config: false, type: Number, default: 2 });
   game.settings.register(MODULE_ID, "naturalOneSteps", { name: L("Natural 1 setback (checkpoints)"), hint: L("How many checkpoints a natural 1 sets the training back (1 = same as a normal failure)."), scope: "world", config: false, type: Number, default: 2 });
   game.settings.register(MODULE_ID, "hoursMigrated", { scope: "world", config: false, type: Boolean, default: false });
+  // Marifet seçicinin listelediği compendium'lar; boş liste = hepsi. Seçicideki dişli düğmesinden yönetilir.
+  game.settings.register(MODULE_ID, "pickerPacks", { scope: "world", config: false, type: Array, default: [] });
   game.settings.register(MODULE_ID, "allowEpicBoon", { name: L("Allow Epic Boon training"), hint: L("Lets the GM link Epic Boons. They use the General goal."), scope: "world", config: false, type: Boolean, default: false });
   game.settings.register(MODULE_ID, "showToPlayers", {
     name: L("Show training tab to players"),
@@ -999,12 +1004,18 @@ async function resetDialog(actor) {
 // oyuncu seçince karakterde bir istek kaydı oluşur ve GM gösterge panelinden onaylar ya da reddeder.
 let featPicker = null;
 
-// Kullanıcının görebildiği bütün Item paketlerindeki feat'ler (Foundry dizini kendisi önbelleğe alır).
-async function loadFeatIndex() {
+// Kullanıcının görebildiği Item paketlerindeki feat'ler (Foundry dizini kendisi önbelleğe alır).
+// GM "pickerPacks" ayarıyla paketleri sınırlayabilir (boş liste = hepsi); all: ayarı yok sayar.
+async function loadFeatIndex({ all = false } = {}) {
   const fields = ["system.type.value", "system.type.subtype", "system.requirements", "system.identifier", "system.prerequisites.repeatable"];
+  const allowed = all ? [] : game.settings.get(MODULE_ID, "pickerPacks") ?? [];
   const feats = [];
   for (const pack of game.packs) {
     if (pack.documentName !== "Item" || !pack.visible) continue;
+    if (allowed.length && !allowed.includes(pack.collection)) continue;
+    // Aynı adlı paketler ("Feats", "Character Options") ait oldukları kitapla ayırt edilir.
+    const owner = pack.metadata.packageType === "system" ? game.system.title : game.modules.get(pack.metadata.packageName)?.title;
+    const source = owner && owner !== pack.title ? `${pack.title} (${owner})` : pack.title;
     const index = await pack.getIndex({ fields });
     for (const entry of index) {
       if (entry.type !== "feat" || entry.system?.type?.value !== "feat") continue;
@@ -1014,7 +1025,7 @@ async function loadFeatIndex() {
         requirements: entry.system.requirements || "",
         identifier: entry.system.identifier || "",
         repeatable: Boolean(entry.system.prerequisites?.repeatable),
-        pack: pack.collection, source: pack.title
+        pack: pack.collection, source
       });
     }
   }
@@ -1043,6 +1054,7 @@ function featPickerHtml(actor, feats) {
       <input type="search" name="q" placeholder="${t("Search feats")}" autofocus>
       <select name="category">${option("", t("All categories"))}${categories.map(c => option(c, categoryLabel(c))).join("")}</select>
       <select name="source">${option("", t("All sources"))}${sources.map(([id, title]) => option(id, title)).join("")}</select>
+      ${game.user.isGM ? `<button type="button" data-act="sources" class="ftd-btn" data-tooltip="${t("Choose which compendiums feats are listed from")}"><i class="fas fa-gear"></i></button>` : ""}
     </div>
     <div class="ftp-list">${rows}</div>
     <p class="ftp-empty" ${feats.length ? "hidden" : ""}>${t("No feats match.")}</p>
@@ -1080,6 +1092,7 @@ async function openFeatPicker(actor) {
     root.querySelector(".ftp-empty").hidden = shown > 0;
   };
   root.querySelector(".ftp-filters").addEventListener("input", applyFilters);
+  root.querySelector('[data-act="sources"]')?.addEventListener("click", () => choosePickerPacks(actor));
   // Arama kutusunda Enter pencereyi kapatmasın.
   root.querySelector('[name="q"]').addEventListener("keydown", event => { if (event.key === "Enter") event.preventDefault(); });
 
@@ -1099,6 +1112,28 @@ async function openFeatPicker(actor) {
     featPicker.close();
   });
   return featPicker;
+}
+
+// GM: seçicinin hangi compendium'ları listeleyeceğini seçer (otomasyon paketlerini ayıklamak için).
+async function choosePickerPacks(actor) {
+  const packs = new Map();
+  for (const feat of await loadFeatIndex({ all: true })) {
+    const entry = packs.get(feat.pack) ?? { title: feat.source, count: 0 };
+    entry.count++;
+    packs.set(feat.pack, entry);
+  }
+  const allowed = game.settings.get(MODULE_ID, "pickerPacks") ?? [];
+  const boxes = [...packs.entries()].sort((a, b) => a[1].title.localeCompare(b[1].title)).map(([id, pack]) =>
+    `<label class="ftp-pack"><input type="checkbox" name="pack" value="${escapeHtml(id)}" ${!allowed.length || allowed.includes(id) ? "checked" : ""}> ${escapeHtml(pack.title)} <small>(${pack.count})</small></label>`).join("");
+  const chosen = await foundry.applications.api.DialogV2.prompt({
+    window: { title: t("Feat sources") },
+    content: `<p class="hint">${t("Feats are listed from the ticked compendiums, for players too. Untick all to list every compendium.")}</p><div class="ftp-packs">${boxes}</div>`,
+    ok: { icon: "fas fa-check", label: t("Save"), callback: (event, button) => [...button.form.querySelectorAll('input[name="pack"]:checked')].map(input => input.value) },
+    rejectClose: false
+  });
+  if (!chosen) return;
+  await game.settings.set(MODULE_ID, "pickerPacks", chosen.length === packs.size ? [] : chosen);
+  return openFeatPicker(actor);
 }
 
 // GM: oyuncunun isteğini onaylar (eğitim başlar) ya da reddeder.
@@ -1148,7 +1183,7 @@ function trainingRows() {
 }
 
 function statusChip(r) {
-  if (r.request) return `<span class="ftd-chip ftd-done">${t("Request")}</span>`;
+  if (r.request) return `<span class="ftd-chip ftd-done">${t("Requested")}</span>`;
   if (!r.linked) return `<span class="ftd-chip ftd-muted">${t("No feat")}</span>`;
   if (r.completed) return r.granted ? `<span class="ftd-chip ftd-ok">${t("Feat granted")}</span>` : `<span class="ftd-chip ftd-done">${t("Complete")}</span>`;
   if (r.ready) return `<span class="ftd-chip ftd-check">${t("Checkpoint")}</span>`;

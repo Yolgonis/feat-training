@@ -159,6 +159,7 @@
   "{actor}'s request for {feat} was declined.": "{actor} karakterinin {feat} isteği reddedildi.",
   "{actor} asks to train {feat}. Approve it in the dashboard.": "{actor}, {feat} eğitimi almak istiyor. Gösterge panelinden onayla.",
   "requests": "istek",
+  "Requested": "İstendi",
   "requested by {player}": "isteyen: {player}",
   "Approve": "Onayla",
   "Start this training": "Bu eğitimi başlat",
@@ -166,6 +167,9 @@
   "Remove the request": "İsteği kaldır",
   "Choose feat": "Marifet seç",
   "Pick a feat from the list": "Listeden bir marifet seç",
+  "Choose which compendiums feats are listed from": "Marifetlerin hangi compendium'lardan listeleneceğini seç",
+  "Feat sources": "Marifet kaynakları",
+  "Feats are listed from the ticked compendiums, for players too. Untick all to list every compendium.": "Marifetler işaretli compendium'lardan listelenir; oyuncular için de geçerlidir. Hepsini listelemek için hiçbirini işaretleme.",
 
   // Gösterge paneli
   "Feat Training — Dashboard": "Marifet Eğitimi — Gösterge Paneli",

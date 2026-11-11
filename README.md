@@ -22,6 +22,7 @@ Eğitimde feat'i olmayan karakterin eğitim sekmesinde **Choose a feat** düğme
 - **Oyuncu** bir feat için **Request** der: karakterde bir istek kaydı oluşur (`flags.feat-training.request`), aktif GM'e bildirim gider ve sekmede "Feat requested" şeridi çıkar (oyuncu **Cancel request** ile geri alabilir).
 - **GM** gösterge panelinde isteği satırın başında görür: **Approve** eğitimi başlatır (kategoriye göre otomatik hedefle), **Decline** isteği siler. İsteği olmayan satırda **Choose feat** aynı pencereyi açar ve GM'in seçtiği feat doğrudan bağlanır. Sürükle-bırak eskisi gibi çalışır.
 - Sekme oyunculardan gizliyken (*Show training tab to players* kapalı) oyuncular seçiciyi göremez.
+- **Kaynaklar:** GM seçicideki dişli düğmesiyle hangi compendium'ların listeleneceğini seçer (dünya ayarı `pickerPacks`; boş = hepsi, oyuncular için de geçerli). Otomasyon modüllerinin feat kopyalarını (ör. CPR Feats, MidiQOL Sample Items) ayıklamak için kullanılır. Aynı adlı paketler ait oldukları kitabın adıyla gösterilir.
 
 ## GM dashboard
 
