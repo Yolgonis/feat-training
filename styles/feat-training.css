@@ -33,7 +33,7 @@
 }
 
 /* ---------- Panel ---------- */
-.ft {
+.feat-training-content.ft {
   --ft-gold: #d6b45f;
   --ft-gold-dim: rgba(214, 180, 95, 0.35);
   --ft-text: #ece6d6;
@@ -289,7 +289,7 @@
     padding: 0.5rem !important;
   }
 
-  .ft {
+  .feat-training-content.ft {
     padding: 1rem 0.85rem;
   }
 
