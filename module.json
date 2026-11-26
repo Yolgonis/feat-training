@@ -6,7 +6,8 @@
   "socket": true,
   "compatibility": {
     "minimum": "13",
-    "verified": "13.351"
+    "verified": "13.351",
+    "maximum": "14.999"
   },
   "authors": [
     {
