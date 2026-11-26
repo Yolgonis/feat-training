@@ -55,7 +55,13 @@ Training saved in sessions by versions before 3.0.0 is converted once (1 session
 
 ## Installation
 
-Install the module by placing the `feat-training` folder in your Foundry VTT `Data/modules` directory, then enable Feat Training Tracker from the world's Manage Modules screen.
+In Foundry, open **Add-on Modules → Install Module** and paste this into **Manifest URL**:
+
+```
+https://github.com/Yolgonis/feat-training/releases/latest/download/module.json
+```
+
+Then enable Feat Training Tracker from the world's Manage Modules screen.
 
 ## Compatibility
 
@@ -70,7 +76,5 @@ Foundry Virtual Tabletop and Foundry VTT are trademarks of Foundry Gaming LLC. D
 
 ## License
 
-Copyright (c) 2026 yolgonis. All rights reserved.
-
-This module is sold as a commercial digital product. Redistribution, resale, or repackaging is not permitted without written permission from the author.
+MIT. See `LICENSE`. Issues and pull requests are welcome.
 
