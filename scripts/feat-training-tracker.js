@@ -1,13 +1,13 @@
 (() => {
 
 const MODULE_ID = "feat-training";
-const DEFAULT_TARGET_SESSIONS = 1280; // saat
+const DEFAULT_TARGET_SESSIONS = 640; // saat
 const DEFAULT_TRAINING_NAME = "Feat Training Tracker";
 const TAB_ID = "feat-training";
 const CHECKPOINT_DC = 15;
 
 // İlerleme saat cinsindendir (oturumlar farklı uzunlukta olabilir). Kategoriye göre otomatik hedef.
-const FEAT_GOALS_DEFAULT = { origin: 960, fightingStyle: 1280, general: 1920 };
+const FEAT_GOALS_DEFAULT = { origin: 480, fightingStyle: 640, general: 960 };
 const LEGACY_HOURS_PER_SESSION = 4;
 // Çeviri: koddaki İngilizce metin anahtardır. Sözlükler scripts/lang-<dil>.js dosyalarındadır ve bu
 // betikten önce yüklenir; sözlükte olmayan metin İngilizce kalır. Yer tutucular {ad} biçimindedir.
@@ -85,9 +85,9 @@ Hooks.once("init", () => {
     if (dashboard?.rendered) reopenDashboard();
   } });
   game.settings.register(MODULE_ID, "checkpointDC", { name: L("Checkpoint DC"), hint: L("Difficulty of the checkpoint ability check. 0 = no roll: checkpoints pass automatically."), scope: "world", config: false, type: Number, default: 15 });
-  game.settings.register(MODULE_ID, "goalOriginHours", { name: L("Goal: Origin feats (hours)"), hint: L("Automatic goal for Origin feats."), scope: "world", config: false, type: Number, default: 960 });
-  game.settings.register(MODULE_ID, "goalFightingStyleHours", { name: L("Goal: Fighting Style feats (hours)"), hint: L("Automatic goal for Fighting Style feats."), scope: "world", config: false, type: Number, default: 1280 });
-  game.settings.register(MODULE_ID, "goalGeneralHours", { name: L("Goal: General feats (hours)"), hint: L("Automatic goal for General feats."), scope: "world", config: false, type: Number, default: 1920 });
+  game.settings.register(MODULE_ID, "goalOriginHours", { name: L("Goal: Origin feats (hours)"), hint: L("Automatic goal for Origin feats."), scope: "world", config: false, type: Number, default: 480 });
+  game.settings.register(MODULE_ID, "goalFightingStyleHours", { name: L("Goal: Fighting Style feats (hours)"), hint: L("Automatic goal for Fighting Style feats."), scope: "world", config: false, type: Number, default: 640 });
+  game.settings.register(MODULE_ID, "goalGeneralHours", { name: L("Goal: General feats (hours)"), hint: L("Automatic goal for General feats."), scope: "world", config: false, type: Number, default: 960 });
   game.settings.register(MODULE_ID, "defaultCheckpointCount", { name: L("Checkpoints per training"), hint: L("Number of checkpoints per training. 0 = no checkpoints: training completes when the goal is reached."), scope: "world", config: false, type: Number, default: 10 });
   game.settings.register(MODULE_ID, "recoveryEnabled", { name: L("Double progress after a failed checkpoint"), hint: L("When unchecked, a failed checkpoint only sets the training back; there is no faster catch-up."), scope: "world", config: false, type: Boolean, default: true });
   game.settings.register(MODULE_ID, "recoveryMultiplier", { name: L("Recovery speed"), hint: L("Hours count this many times after a failed checkpoint (1 disables the bonus)."), scope: "world", config: false, type: Number, default: 2 });

@@ -8,7 +8,7 @@ The module adds a graduation-cap tab to character sheets. The GM links a feat, a
 
 - Adds a Feat Training tab to character and NPC sheets (NPC sheets: GM only).
 - **Progress is tracked in hours**, so sessions of any length (2, 5 or 8 hours) count correctly. Add Hours takes the hours trained; Set Hours writes the total directly (checkpoints below the new value count as passed, a value exactly on a checkpoint still requires its check).
-- Drag a feat onto the tab to start training (the feat is not added to the character). The goal comes from the feat's category: Origin 960, Fighting Style 1280, General 1920 hours. Epic Boons are not trainable unless allowed in the settings. The GM can set a manual goal (Set Goal) or switch back to the automatic one; a manual goal on training in progress is kept when a feat is linked.
+- Drag a feat onto the tab to start training (the feat is not added to the character). The goal comes from the feat's category: Origin 480, Fighting Style 640, General 960 hours. Epic Boons are not trainable unless allowed in the settings. The GM can set a manual goal (Set Goal) or switch back to the automatic one; a manual goal on training in progress is kept when a feat is linked.
 - The goal is split into 10 checkpoints; the last one sits at 100%. Checkpoints cannot be skipped: added hours stop at the next checkpoint until its check is passed. Passed checkpoints survive corrections; only Reset clears them.
 - Checkpoint checks are real dnd5e ability checks (advantage, exhaustion and bonuses apply) against DC 15. The ability is picked automatically from the character's class (primary ability of the highest-level class, the higher score if there are several; without a class, the highest score).
 - **Failure and recovery:** a failed check drops progress to the previous checkpoint, and hours count double until the failed point is reached again. A natural 1 always fails and drops progress two checkpoints back. The tab shows the recovery state to GM and player.
@@ -45,7 +45,7 @@ Tüm kurallar dashboard'ın **Settings** sekmesinde yönetilir (Foundry'nin mod�
 - **Visibility:** *Show training tab to players* (varsayılan açık). Kapalıyken oyuncular sekmeyi görmez; karakter bir checkpoint'e geldiğinde yalnızca Roll düğmeli sade bir sekme çıkar ve zardan sonra kaybolur.
 - **Checkpoints:** DC (15) ve checkpoint sayısı (10). **DC 0** = zar atılmaz, checkpoint'ler otomatik geçilir; **checkpoint sayısı 0** = checkpoint yok. İkisinde de hedefe ulaşan eğitim zarsız tamamlanır ve **Grant feat** hazır olur.
 - **Failure and recovery:** başarısız checkpoint sonrası çift ilerleme açık/kapalı, telafi çarpanı (2) ve doğal 1'de kaç checkpoint geri düşüleceği (2).
-- **Goals (hours):** Origin 960, Fighting Style 1280, General 1920 saat; *Allow Epic Boon training* (kapalı, açılırsa General hedefini kullanır).
+- **Goals (hours):** Origin 480, Fighting Style 640, General 960 saat; *Allow Epic Boon training* (kapalı, açılırsa General hedefini kullanır).
 
 ## Usage
 
